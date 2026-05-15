@@ -1,0 +1,996 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>MBQ 真實行車輔助系統</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Noto+Sans+TC:wght@300;400;500&display=swap" rel="stylesheet">
+<!-- Leaflet.js for map -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<!-- Day.js for time -->
+<script src="https://unpkg.com/dayjs@1.11.10/dayjs.min.js"></script>
+<script src="https://unpkg.com/dayjs@1.11.10/locale/zh-tw.js"></script>
+<script src="https://unpkg.com/dayjs@1.11.10/plugin/duration.js"></script>
+
+<style>
+:root {
+  --amber: #f0a500;
+  --amber-glow: rgba(240,165,0,0.3);
+  --amber-dim: rgba(240,165,0,0.08);
+  --cyan: #00e5ff;
+  --cyan-glow: rgba(0,229,255,0.25);
+  --green: #00e676;
+  --red: #ff3b3b;
+  --blue: #1a78ff;
+  --bg: #07090d;
+  --bg-panel: #0b0f18;
+  --bg-card: #0f1520;
+  --bg-card2: #131c2a;
+  --border: rgba(255,255,255,0.07);
+  --border-amber: rgba(240,165,0,0.25);
+  --text: #dde4f0;
+  --text-dim: #4a5870;
+  --text-mid: #8a9ab5;
+  --font-hud: 'Orbitron', monospace;
+  --font-ui: 'Noto Sans TC', sans-serif;
+  --r: 14px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{
+  font-family:var(--font-ui);
+  background:var(--bg);
+  color:var(--text);
+  display:grid;
+  grid-template-rows:auto 1fr auto auto;
+  grid-template-columns:1fr;
+  height:100dvh;
+  overflow:hidden;
+}
+
+/* ─── STATUS BAR ─── */
+.sbar{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:5px 14px;
+  background:#04060a;
+  border-bottom:1px solid var(--border);
+  font-family:var(--font-hud);font-size:11px;color:var(--text-dim);
+  flex-wrap:wrap;gap:6px;
+  position:relative;z-index:100;
+}
+.sbar-nav{display:flex;gap:16px}
+.sbar-nav span{cursor:pointer;font-size:15px;transition:color .2s}
+.sbar-nav span:hover{color:var(--amber)}
+.sbar-right{display:flex;gap:12px;align-items:center}
+#sb-clock{color:var(--cyan);font-size:12px;letter-spacing:1px}
+.s-dot{width:7px;height:7px;border-radius:50%;display:inline-block}
+.s-gps{background:var(--amber);box-shadow:0 0 6px var(--amber)}
+.s-gps.off{background:#333;box-shadow:none}
+.s-net{background:var(--green);box-shadow:0 0 6px var(--green)}
+
+/* ─── MAIN BODY ─── */
+.main{
+  display:grid;
+  grid-template-columns:220px 1fr 200px;
+  grid-template-rows:1fr;
+  gap:8px;
+  padding:8px;
+  overflow:hidden;
+  min-height:0;
+}
+@media(max-width:900px){
+  .main{grid-template-columns:1fr 1fr;grid-template-rows:auto auto}
+  .map-panel{grid-column:1/-1;grid-row:2}
+}
+@media(max-width:540px){
+  .main{grid-template-columns:1fr;grid-template-rows:repeat(3,auto)}
+  .map-panel{grid-column:1;grid-row:3;height:200px}
+  body{overflow-y:auto}html,body{height:auto}
+}
+
+/* ─── CARDS ─── */
+.card{
+  background:var(--bg-card);
+  border:1px solid var(--border);
+  border-radius:var(--r);
+  padding:12px 14px;
+  position:relative;
+  overflow:hidden;
+  display:flex;flex-direction:column;gap:8px;
+}
+.card::after{
+  content:'';position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(135deg,rgba(255,255,255,0.025) 0%,transparent 55%);
+}
+.ct{
+  font-family:var(--font-hud);font-size:9px;letter-spacing:2.5px;
+  text-transform:uppercase;color:var(--text-dim);
+  display:flex;align-items:center;gap:6px;
+}
+.ct .live-pip{
+  width:5px;height:5px;border-radius:50%;background:var(--green);
+  box-shadow:0 0 5px var(--green);
+  animation:blink 2s ease-in-out infinite;
+}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+
+/* ─── LEFT PANEL ─── */
+.left-panel{display:flex;flex-direction:column;gap:8px}
+
+/* Datetime */
+.dt-card{}
+.dt-ampm{font-family:var(--font-hud);font-size:10px;color:var(--text-dim);letter-spacing:1px}
+.dt-time{
+  font-family:var(--font-hud);
+  font-size:clamp(30px,4vw,46px);
+  font-weight:900;
+  color:var(--amber);
+  text-shadow:0 0 18px var(--amber-glow),0 0 40px rgba(240,165,0,.15);
+  letter-spacing:2px;line-height:1.1;
+}
+.dt-date{font-family:var(--font-hud);font-size:11px;color:var(--text-dim);letter-spacing:1px;margin-top:2px}
+.dt-day{font-size:12px;color:var(--text-mid);margin-top:1px}
+
+/* Weather card */
+.wx-card{}
+.wx-main{display:flex;align-items:center;gap:10px}
+.wx-icon{font-size:28px;line-height:1}
+.wx-temp{font-family:var(--font-hud);font-size:28px;font-weight:700;color:var(--cyan);text-shadow:0 0 14px var(--cyan-glow)}
+.wx-desc{font-size:11px;color:var(--text-mid);margin-top:3px}
+.wx-row{display:flex;gap:10px;margin-top:4px}
+.wx-chip{
+  background:rgba(255,255,255,0.04);border:1px solid var(--border);
+  border-radius:20px;padding:2px 8px;font-size:10px;color:var(--text-mid);
+  display:flex;align-items:center;gap:4px;
+}
+
+/* Compass card */
+.compass-card{padding-bottom:10px}
+.compass-wrap{
+  position:relative;width:80px;height:80px;margin:0 auto;
+}
+.compass-wrap svg{width:100%;height:100%}
+#compass-needle{transform-origin:50% 50%;transition:transform .4s ease}
+.hdg-val{
+  text-align:center;font-family:var(--font-hud);font-size:18px;font-weight:700;
+  color:var(--amber);
+}
+.hdg-dir{text-align:center;font-size:11px;color:var(--text-mid);margin-top:2px}
+
+/* ─── CENTER: SPEED + MAP ─── */
+.center-panel{display:flex;flex-direction:column;gap:8px}
+.speed-card{
+  background:radial-gradient(ellipse at 50% 120%,rgba(240,165,0,.1) 0%,transparent 65%),var(--bg-card);
+  border-color:var(--border-amber);
+  align-items:center;
+  flex-shrink:0;
+}
+.arc-wrap{position:relative;width:160px;height:160px;margin:0 auto}
+.arc-wrap svg{width:100%;height:100%}
+.speed-overlay{
+  position:absolute;inset:0;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+}
+#spd-num{
+  font-family:var(--font-hud);font-size:clamp(36px,5vw,50px);font-weight:900;
+  color:var(--amber);text-shadow:0 0 24px var(--amber-glow);line-height:1;
+}
+.spd-unit{font-family:var(--font-hud);font-size:10px;color:var(--text-dim);letter-spacing:2px;margin-top:2px}
+.speed-extras{
+  display:flex;gap:16px;justify-content:center;margin-top:4px;
+  font-family:var(--font-hud);font-size:10px;color:var(--text-dim);
+}
+.se-item{display:flex;flex-direction:column;align-items:center;gap:2px}
+.se-val{font-size:13px;color:var(--text);font-weight:600}
+
+/* GPS source badge */
+.gps-badge{
+  display:inline-flex;align-items:center;gap:5px;
+  border-radius:20px;padding:2px 8px;font-size:9px;
+  font-family:var(--font-hud);letter-spacing:1px;
+}
+.gps-badge.real{background:rgba(0,230,118,.1);border:1px solid rgba(0,230,118,.3);color:var(--green)}
+.gps-badge.waiting{background:rgba(240,165,0,.08);border:1px solid var(--border-amber);color:var(--amber)}
+.gps-badge.err{background:rgba(255,59,59,.08);border:1px solid rgba(255,59,59,.3);color:var(--red)}
+
+/* Map */
+.map-panel{
+  flex:1;min-height:0;
+  border:1px solid var(--border);border-radius:var(--r);
+  overflow:hidden;position:relative;
+}
+#map{width:100%;height:100%;min-height:160px}
+.map-overlay{
+  position:absolute;top:8px;left:8px;right:8px;
+  display:flex;justify-content:space-between;align-items:flex-start;
+  pointer-events:none;z-index:400;
+}
+.map-info-chip{
+  background:rgba(7,9,13,.85);
+  border:1px solid var(--border);
+  border-radius:8px;padding:4px 10px;
+  font-family:var(--font-hud);font-size:10px;color:var(--text-mid);
+  backdrop-filter:blur(6px);
+}
+
+/* ─── RIGHT PANEL ─── */
+.right-panel{display:flex;flex-direction:column;gap:8px}
+
+/* Radio */
+.radio-card{}
+.disc{
+  width:56px;height:56px;
+  background:conic-gradient(#222,#555,#888,#555,#222,#555,#888,#222);
+  border-radius:50%;margin:4px auto;position:relative;
+  animation:spin 3s linear infinite;
+  box-shadow:0 0 12px rgba(0,229,255,.15);
+}
+.disc::after{
+  content:'';position:absolute;inset:36%;
+  background:#0f1520;border-radius:50%;
+  border:2px solid #666;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+.disc.paused{animation-play-state:paused}
+.freq-val{
+  font-family:var(--font-hud);font-size:22px;font-weight:700;
+  color:var(--cyan);text-shadow:0 0 12px var(--cyan-glow);
+  text-align:center;
+}
+.freq-name{font-size:10px;color:var(--text-mid);text-align:center;min-height:14px;
+  overflow:hidden;white-space:nowrap;text-overflow:ellipsis;padding:0 4px}
+.media-row{display:flex;justify-content:center;gap:10px;margin-top:4px}
+.mb{
+  background:rgba(255,255,255,0.04);border:1px solid var(--border);
+  border-radius:8px;color:var(--text);width:32px;height:32px;
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;font-size:13px;transition:all .2s;
+}
+.mb:hover{background:var(--amber-dim);color:var(--amber);box-shadow:0 0 8px var(--amber-glow)}
+.mb.playing{background:var(--cyan-glow);color:var(--cyan)}
+.rb-list{
+  max-height:80px;overflow-y:auto;scrollbar-width:thin;
+  scrollbar-color:var(--border) transparent;margin-top:4px;
+}
+.rb-item{
+  padding:4px 6px;font-size:10px;color:var(--text-mid);
+  cursor:pointer;border-radius:6px;transition:background .15s;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.rb-item:hover{background:rgba(255,255,255,.05);color:var(--text)}
+.rb-item.active{color:var(--cyan);background:var(--cyan-glow)}
+
+/* OBD card */
+.obd-card{}
+.obd-status{
+  display:flex;align-items:center;gap:6px;
+  font-size:10px;color:var(--text-mid);
+  border:1px solid var(--border);border-radius:8px;
+  padding:5px 8px;cursor:pointer;transition:border-color .2s;
+  margin-bottom:4px;
+}
+.obd-status:hover{border-color:var(--amber)}
+.obd-status .s-dot{flex-shrink:0}
+.obd-gauges{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.og{
+  background:var(--bg-card2);border:1px solid var(--border);
+  border-radius:10px;padding:7px 8px;
+}
+.og-label{font-family:var(--font-hud);font-size:8px;letter-spacing:1.5px;color:var(--text-dim);text-transform:uppercase}
+.og-val{font-family:var(--font-hud);font-size:16px;font-weight:700;margin-top:2px}
+.og-bar{height:3px;background:rgba(255,255,255,.05);border-radius:2px;margin-top:5px;overflow:hidden}
+.og-fill{height:100%;border-radius:2px;transition:width .8s ease}
+.og.fuel .og-val{color:var(--amber)} .og.fuel .og-fill{background:linear-gradient(90deg,#f06000,var(--amber))}
+.og.rpm .og-val{color:var(--green)} .og.rpm .og-fill{background:linear-gradient(90deg,#00b050,var(--green))}
+.og.temp .og-val{color:var(--cyan)} .og.temp .og-fill{background:linear-gradient(90deg,#0090c0,var(--cyan))}
+.og.bat .og-val{color:#b388ff} .og.bat .og-fill{background:linear-gradient(90deg,#7c4dff,#b388ff)}
+
+/* ─── ALERT ─── */
+.alert-bar{
+  display:none;
+  background:linear-gradient(90deg,rgba(255,59,59,.18),transparent);
+  border-top:2px solid var(--red);
+  padding:5px 14px;
+  font-size:11px;color:#ff8a80;
+  align-items:center;gap:8px;
+  animation:slideIn .3s ease;
+  font-family:var(--font-hud);
+}
+@keyframes slideIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+
+/* ─── QUICKBAR ─── */
+.qbar{
+  display:flex;
+  background:#04060a;
+  border-top:1px solid var(--border);
+  overflow-x:auto;scrollbar-width:none;
+}
+.qbar::-webkit-scrollbar{display:none}
+.qi{
+  flex:1;min-width:64px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:8px 4px;cursor:pointer;
+  border-right:1px solid var(--border);
+  transition:background .2s;gap:3px;position:relative;
+}
+.qi:last-child{border-right:none}
+.qi:hover{background:rgba(255,255,255,.03)}
+.qi.on{background:var(--amber-dim)}
+.qi.on .qi-lbl{color:var(--amber)}
+.qi-ico{font-size:18px}
+.qi-lbl{font-size:9px;color:var(--text-dim);letter-spacing:.5px;white-space:nowrap}
+.qi-pip{
+  position:absolute;top:5px;right:10px;
+  width:6px;height:6px;border-radius:50%;
+  background:var(--red);box-shadow:0 0 5px var(--red);
+  animation:blink 1.2s ease-in-out infinite;
+}
+
+/* Permissions modal */
+.modal{
+  display:none;position:fixed;inset:0;
+  background:rgba(0,0,0,.75);backdrop-filter:blur(8px);
+  z-index:9999;align-items:center;justify-content:center;
+}
+.modal.show{display:flex}
+.modal-box{
+  background:var(--bg-card);border:1px solid var(--border-amber);
+  border-radius:16px;padding:24px;max-width:340px;width:90%;
+  text-align:center;
+}
+.modal-box h2{font-family:var(--font-hud);font-size:16px;color:var(--amber);margin-bottom:12px}
+.modal-box p{font-size:13px;color:var(--text-mid);line-height:1.6;margin-bottom:16px}
+.modal-btn{
+  background:var(--amber);color:#000;font-family:var(--font-hud);
+  font-size:12px;font-weight:700;letter-spacing:1px;
+  border:none;border-radius:8px;padding:10px 24px;cursor:pointer;
+  transition:opacity .2s;display:block;width:100%;margin-bottom:8px;
+}
+.modal-btn:hover{opacity:.85}
+.modal-btn.sec{background:transparent;color:var(--text-dim);border:1px solid var(--border)}
+</style>
+</head>
+<body>
+
+<!-- Permission Modal -->
+<div class="modal show" id="perm-modal">
+  <div class="modal-box">
+    <h2>📡 需要裝置權限</h2>
+    <p>此系統需要存取：<br>
+    • <b>GPS 位置</b>（取得真實車速、方向）<br>
+    • <b>設備方向</b>（羅盤）<br>
+    授權後將顯示真實行車數據。</p>
+    <button class="modal-btn" id="grant-btn">授權並啟動</button>
+    <button class="modal-btn sec" id="skip-btn">略過（使用受限模式）</button>
+  </div>
+</div>
+
+<!-- STATUS BAR -->
+<div class="sbar">
+  <div class="sbar-nav">
+    <span title="返回">&#8592;</span>
+    <span title="首頁">&#8962;</span>
+    <span title="多工">&#9634;</span>
+  </div>
+  <div style="display:flex;gap:10px;align-items:center;font-size:10px">
+    <span class="s-dot s-gps off" id="gps-dot" title="GPS狀態"></span>GPS
+    <span class="s-dot s-net" title="網路"></span>網路
+    <span id="sb-bt" style="font-size:12px;color:var(--text-dim)">⚡</span>
+  </div>
+  <div class="sbar-right">
+    <span id="sb-clock">--:--</span>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+
+  <!-- LEFT -->
+  <div class="left-panel">
+
+    <!-- DateTime -->
+    <div class="card dt-card">
+      <div class="ct"><div class="live-pip"></div>系統時間</div>
+      <div class="dt-ampm" id="ampm">--</div>
+      <div class="dt-time" id="clock">--:--</div>
+      <div class="dt-day" id="weekday">-</div>
+      <div class="dt-date" id="datedisp">----/--/--</div>
+    </div>
+
+    <!-- Weather -->
+    <div class="card wx-card">
+      <div class="ct"><div class="live-pip"></div>即時天氣</div>
+      <div class="wx-main">
+        <div class="wx-icon" id="wx-icon">⏳</div>
+        <div>
+          <div class="wx-temp"><span id="wx-temp">--</span>°C</div>
+          <div class="wx-desc" id="wx-desc">載入中…</div>
+        </div>
+      </div>
+      <div class="wx-row">
+        <div class="wx-chip">💧 <span id="wx-humid">--</span>%</div>
+        <div class="wx-chip">🌬 <span id="wx-wind">--</span> km/h</div>
+        <div class="wx-chip" id="wx-loc-chip" style="font-size:9px">📍定位中</div>
+      </div>
+    </div>
+
+    <!-- Compass -->
+    <div class="card compass-card">
+      <div class="ct">方向羅盤</div>
+      <div class="compass-wrap">
+        <svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">
+          <!-- Ring -->
+          <circle cx="40" cy="40" r="38" fill="none" stroke="rgba(255,255,255,.06)" stroke-width="2"/>
+          <!-- Cardinal -->
+          <text x="40" y="9" text-anchor="middle" font-family="Orbitron" font-size="7" fill="rgba(255,59,59,.8)">N</text>
+          <text x="40" y="75" text-anchor="middle" font-family="Orbitron" font-size="6" fill="rgba(255,255,255,.3)">S</text>
+          <text x="73" y="43" text-anchor="middle" font-family="Orbitron" font-size="6" fill="rgba(255,255,255,.3)">E</text>
+          <text x="7" y="43" text-anchor="middle" font-family="Orbitron" font-size="6" fill="rgba(255,255,255,.3)">W</text>
+          <!-- Needle -->
+          <g id="compass-needle">
+            <polygon points="40,14 37,40 40,46 43,40" fill="var(--red)" opacity=".9"/>
+            <polygon points="40,66 37,40 40,34 43,40" fill="rgba(255,255,255,.25)"/>
+            <circle cx="40" cy="40" r="3" fill="var(--bg-card)" stroke="rgba(255,255,255,.2)" stroke-width="1"/>
+          </g>
+        </svg>
+      </div>
+      <div class="hdg-val" id="hdg-val">--°</div>
+      <div class="hdg-dir" id="hdg-dir">等待感測器</div>
+    </div>
+
+  </div>
+
+  <!-- CENTER -->
+  <div class="center-panel">
+
+    <!-- Speedometer -->
+    <div class="card speed-card">
+      <div class="ct" style="justify-content:center"><div class="live-pip"></div>GPS 真實車速</div>
+      <div class="arc-wrap">
+        <svg viewBox="0 0 160 160" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="spdGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#f0a500"/>
+              <stop offset="100%" stop-color="#ffdd44"/>
+            </linearGradient>
+            <filter id="glow"><feGaussianBlur stdDeviation="2.5"/></filter>
+          </defs>
+          <!-- BG arc -->
+          <path id="a-bg" fill="none" stroke="rgba(255,255,255,.05)" stroke-width="12" stroke-linecap="round"/>
+          <!-- Glow -->
+          <path id="a-glow" fill="none" stroke="rgba(240,165,0,.2)" stroke-width="16" stroke-linecap="round" filter="url(#glow)"/>
+          <!-- Active -->
+          <path id="a-fill" fill="none" stroke="url(#spdGrad)" stroke-width="10" stroke-linecap="round"/>
+          <!-- Ticks -->
+          <g id="ticks"></g>
+        </svg>
+        <div class="speed-overlay">
+          <div id="spd-num">0</div>
+          <div class="spd-unit">公里/時</div>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:center;margin-top:2px">
+        <div class="gps-badge waiting" id="gps-badge">⏳ 等待 GPS</div>
+      </div>
+      <div class="speed-extras">
+        <div class="se-item"><div class="se-val" id="acc-val">--</div><div>m/s²</div></div>
+        <div class="se-item"><div class="se-val" id="alt-val">--</div><div>海拔m</div></div>
+        <div class="se-item"><div class="se-val" id="acc-m-val">--</div><div>精度m</div></div>
+      </div>
+    </div>
+
+    <!-- Map -->
+    <div class="map-panel">
+      <div id="map"></div>
+      <div class="map-overlay">
+        <div class="map-info-chip" id="map-coords">📍 定位中…</div>
+        <div class="map-info-chip" id="map-spd2">-- km/h</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- RIGHT -->
+  <div class="right-panel">
+
+    <!-- Radio -->
+    <div class="card radio-card">
+      <div class="ct"><div class="live-pip"></div>線上廣播</div>
+      <div class="disc" id="disc"></div>
+      <div class="freq-val" id="freq-val">--</div>
+      <div class="freq-name" id="freq-name">載入電台中…</div>
+      <div class="media-row">
+        <button class="mb" id="btn-prev" title="上一台">&#9664;&#9664;</button>
+        <button class="mb playing" id="btn-play" title="播放/暫停">&#9646;&#9646;</button>
+        <button class="mb" id="btn-next" title="下一台">&#9654;&#9654;</button>
+      </div>
+      <div class="rb-list" id="rb-list"></div>
+      <audio id="radio-audio" preload="none"></audio>
+    </div>
+
+    <!-- OBD -->
+    <div class="card obd-card">
+      <div class="ct">OBD-II 車況</div>
+      <div class="obd-status" id="obd-btn" title="點擊連接 OBD 裝置">
+        <span class="s-dot" id="obd-dot" style="background:#333"></span>
+        <span id="obd-txt">點擊連接 OBD-II 裝置</span>
+      </div>
+      <div class="obd-gauges">
+        <div class="og fuel">
+          <div class="og-label">燃油</div>
+          <div class="og-val"><span id="obd-fuel">--</span>%</div>
+          <div class="og-bar"><div class="og-fill" id="obd-fuel-b" style="width:0%"></div></div>
+        </div>
+        <div class="og rpm">
+          <div class="og-label">轉速</div>
+          <div class="og-val"><span id="obd-rpm">--</span></div>
+          <div class="og-bar"><div class="og-fill" id="obd-rpm-b" style="width:0%"></div></div>
+        </div>
+        <div class="og temp">
+          <div class="og-label">水溫</div>
+          <div class="og-val"><span id="obd-temp">--</span>°C</div>
+          <div class="og-bar"><div class="og-fill" id="obd-temp-b" style="width:0%"></div></div>
+        </div>
+        <div class="og bat">
+          <div class="og-label">電瓶</div>
+          <div class="og-val"><span id="obd-bat">--</span>V</div>
+          <div class="og-bar"><div class="og-fill" id="obd-bat-b" style="width:0%"></div></div>
+        </div>
+      </div>
+      <div style="font-size:9px;color:var(--text-dim);margin-top:4px;line-height:1.5">
+        需配合 ELM327 OBD-II 藍牙/USB 裝置<br>透過 Web Serial API 讀取真實數值
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+<!-- ALERT -->
+<div class="alert-bar" id="alert-bar">
+  <span>⚠️</span><span id="alert-msg">警告</span>
+</div>
+
+<!-- QUICKBAR -->
+<div class="qbar">
+  <div class="qi on" onclick="qact(this)">
+    <div class="qi-ico">🗺️</div><div class="qi-lbl">導航</div>
+  </div>
+  <div class="qi" onclick="qact(this)">
+    <div class="qi-ico">📻</div><div class="qi-lbl">廣播</div>
+  </div>
+  <div class="qi" onclick="qact(this)">
+    <div class="qi-ico">⚙️</div><div class="qi-lbl">OBD</div>
+  </div>
+  <div class="qi" onclick="qact(this)">
+    <div class="qi-ico">📱</div><div class="qi-lbl">應用</div>
+    <div class="qi-pip"></div>
+  </div>
+  <div class="qi" onclick="qact(this)">
+    <div class="qi-ico">🌤️</div><div class="qi-lbl">天氣</div>
+  </div>
+  <div class="qi" onclick="qact(this)">
+    <div class="qi-ico">🔊</div><div class="qi-lbl">音量</div>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════
+// 1. DAYJS LOCALE
+// ════════════════════════════════════
+dayjs.locale('zh-tw');
+
+// ════════════════════════════════════
+// 2. CLOCK (real)
+// ════════════════════════════════════
+function tickClock() {
+  const now = dayjs();
+  const h = now.hour(), m = now.minute();
+  const pm = h >= 12 ? 'PM' : 'AM';
+  const h12 = h % 12 || 12;
+  const pad = n => String(n).padStart(2,'0');
+  document.getElementById('clock').textContent = `${pad(h12)}:${pad(m)}`;
+  document.getElementById('sb-clock').textContent = `${pad(h12)}:${pad(m)}`;
+  document.getElementById('ampm').textContent = pm;
+  const days = ['星期日','星期一','星期二','星期三','星期四','星期五','星期六'];
+  document.getElementById('weekday').textContent = days[now.day()];
+  document.getElementById('datedisp').textContent = now.format('YYYY/MM/DD');
+}
+tickClock();
+setInterval(tickClock, 1000);
+
+// ════════════════════════════════════
+// 3. SPEEDOMETER ARC (SVG)
+// ════════════════════════════════════
+const CX=80,CY=80,R=70,SD=140,ED=400;
+function d2r(d){return d*Math.PI/180}
+function arc(sd,ed,r){
+  const s={x:CX+r*Math.cos(d2r(sd)),y:CY+r*Math.sin(d2r(sd))};
+  const e={x:CX+r*Math.cos(d2r(ed)),y:CY+r*Math.sin(d2r(ed))};
+  const lg=(ed-sd)>180?1:0;
+  return `M${s.x} ${s.y} A${r} ${r} 0 ${lg} 1 ${e.x} ${e.y}`;
+}
+document.getElementById('a-bg').setAttribute('d',arc(SD,ED,R));
+document.getElementById('a-glow').setAttribute('d',arc(SD,SD,R));
+document.getElementById('a-fill').setAttribute('d',arc(SD,SD,R));
+const tg=document.getElementById('ticks');
+for(let i=0;i<=18;i++){
+  const pct=i/18, deg=SD+pct*(ED-SD);
+  const ri=60, ro=i%3===0?68:65;
+  const s={x:CX+ri*Math.cos(d2r(deg)),y:CY+ri*Math.sin(d2r(deg))};
+  const e={x:CX+ro*Math.cos(d2r(deg)),y:CY+ro*Math.sin(d2r(deg))};
+  const l=document.createElementNS('http://www.w3.org/2000/svg','line');
+  l.setAttribute('x1',s.x);l.setAttribute('y1',s.y);
+  l.setAttribute('x2',e.x);l.setAttribute('y2',e.y);
+  l.setAttribute('stroke',i%3===0?'rgba(255,255,255,.3)':'rgba(255,255,255,.1)');
+  l.setAttribute('stroke-width',i%3===0?'1.5':'1');
+  tg.appendChild(l);
+}
+
+function updateSpeed(kmh) {
+  const v = Math.max(0, Math.round(kmh));
+  document.getElementById('spd-num').textContent = v;
+  document.getElementById('map-spd2').textContent = v + ' km/h';
+  const pct = Math.min(v / 180, 1);
+  const endDeg = SD + pct*(ED-SD);
+  const fillPath = arc(SD, endDeg, R);
+  document.getElementById('a-fill').setAttribute('d', pct > 0.001 ? fillPath : arc(SD,SD+0.01,R));
+  document.getElementById('a-glow').setAttribute('d', pct > 0.001 ? fillPath : arc(SD,SD+0.01,R));
+  // Color change
+  const fill = document.getElementById('a-fill');
+  if(v>120) fill.setAttribute('stroke','#ff3b3b');
+  else if(v>80) fill.setAttribute('stroke','#ff8000');
+  else fill.setAttribute('stroke','url(#spdGrad)');
+  // Alert
+  const ab = document.getElementById('alert-bar');
+  if(v>120){
+    ab.style.display='flex';
+    document.getElementById('alert-msg').textContent = `⚡ 車速 ${v} km/h 超過安全限制，請立即減速`;
+  } else ab.style.display='none';
+}
+
+// ════════════════════════════════════
+// 4. GPS — REAL navigator.geolocation
+// ════════════════════════════════════
+let map, marker, gpsWatchId=null, lastLat=null, lastLon=null;
+let gpsGranted = false;
+
+function initMap(lat=25.04, lon=121.53) {
+  map = L.map('map',{zoomControl:false,attributionControl:false}).setView([lat,lon],14);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{
+    maxZoom:19,attribution:'© OpenStreetMap © CARTO'
+  }).addTo(map);
+  L.control.attribution({prefix:false,position:'bottomright'}).addTo(map);
+  const carIcon = L.divIcon({
+    className:'',
+    html:'<div style="font-size:22px;filter:drop-shadow(0 0 6px rgba(240,165,0,.8))">🚗</div>',
+    iconAnchor:[11,11]
+  });
+  marker = L.marker([lat,lon],{icon:carIcon}).addTo(map);
+}
+
+function startGPS() {
+  if(!navigator.geolocation){
+    setGPSBadge('err','不支援 GPS');return;
+  }
+  setGPSBadge('waiting','定位中…');
+  gpsWatchId = navigator.geolocation.watchPosition(
+    pos => {
+      const {latitude:lat,longitude:lon,speed,altitude,accuracy,heading} = pos.coords;
+      lastLat=lat; lastLon=lon;
+      document.getElementById('gps-dot').classList.remove('off');
+      // Speed (m/s → km/h)
+      const kmh = speed != null ? speed * 3.6 : 0;
+      updateSpeed(kmh);
+      setGPSBadge('real','✅ GPS 真實數據');
+      // Extras
+      document.getElementById('alt-val').textContent = altitude != null ? Math.round(altitude) : '--';
+      document.getElementById('acc-m-val').textContent = accuracy != null ? Math.round(accuracy) : '--';
+      // Heading from GPS
+      if(heading != null && !isNaN(heading)) updateCompass(heading, 'GPS');
+      // Coords
+      document.getElementById('map-coords').textContent =
+        `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+      // Reverse geocode (Nominatim, free)
+      reverseGeocode(lat, lon);
+      // Map
+      if(map){ marker.setLatLng([lat,lon]); map.panTo([lat,lon]); }
+      // Fetch weather with real coords
+      if(gpsGranted) fetchWeather(lat, lon);
+    },
+    err => {
+      setGPSBadge('err','GPS 錯誤: ' + err.message);
+      document.getElementById('gps-dot').classList.add('off');
+    },
+    {enableHighAccuracy:true, maximumAge:1000, timeout:10000}
+  );
+}
+
+let lastGeocodeTime=0, lastGeocodeCoord='';
+async function reverseGeocode(lat,lon) {
+  const now=Date.now();
+  const coord=`${lat.toFixed(3)},${lon.toFixed(3)}`;
+  if(now-lastGeocodeTime<8000 || coord===lastGeocodeCoord) return;
+  lastGeocodeTime=now; lastGeocodeCoord=coord;
+  try{
+    const r = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`,
+      {headers:{'Accept-Language':'zh-TW'}});
+    const d = await r.json();
+    const addr = d.address;
+    const place = addr.city||addr.town||addr.village||addr.county||'';
+    const road = addr.road||addr.suburb||'';
+    document.getElementById('wx-loc-chip').textContent = '📍 '+place+(road?' · '+road:'');
+  }catch(e){}
+}
+
+function setGPSBadge(type, msg) {
+  const b = document.getElementById('gps-badge');
+  b.className = 'gps-badge '+type;
+  b.textContent = msg;
+}
+
+// ════════════════════════════════════
+// 5. DEVICE ORIENTATION — Compass
+// ════════════════════════════════════
+const DIRS = ['北','東北','東','東南','南','西南','西','西北'];
+function headingToDir(h){ return DIRS[Math.round(h/45)%8]; }
+
+function updateCompass(heading, src='陀螺儀') {
+  const h = Math.round(heading);
+  document.getElementById('compass-needle').style.transform = `rotate(${h}deg)`;
+  document.getElementById('hdg-val').textContent = h + '°';
+  document.getElementById('hdg-dir').textContent = headingToDir(h)+' ('+src+')';
+}
+
+function startCompass() {
+  if(typeof DeviceOrientationEvent !== 'undefined' &&
+     typeof DeviceOrientationEvent.requestPermission === 'function'){
+    DeviceOrientationEvent.requestPermission().then(s=>{
+      if(s==='granted') listenOrientation();
+    }).catch(()=>{});
+  } else {
+    listenOrientation();
+  }
+}
+
+function listenOrientation() {
+  window.addEventListener('deviceorientation', e=>{
+    let h = e.webkitCompassHeading || (e.alpha ? (360 - e.alpha) : null);
+    if(h!=null) updateCompass(Math.round(h), '陀螺儀');
+  }, true);
+}
+
+// ════════════════════════════════════
+// 6. WEATHER — Open-Meteo (free, no key)
+// ════════════════════════════════════
+const WX_CODES = {
+  0:'☀️',1:'🌤️',2:'⛅',3:'☁️',
+  45:'🌫️',48:'🌫️',51:'🌦️',53:'🌦️',55:'🌧️',
+  61:'🌧️',63:'🌧️',65:'🌧️',71:'❄️',73:'❄️',75:'❄️',
+  80:'🌦️',81:'🌦️',82:'⛈️',95:'⛈️',96:'⛈️',99:'⛈️'
+};
+const WX_DESC = {
+  0:'晴天',1:'大致晴朗',2:'部分多雲',3:'陰天',
+  45:'霧',48:'霧凇',51:'小毛毛雨',53:'毛毛雨',55:'大毛毛雨',
+  61:'小雨',63:'中雨',65:'大雨',71:'小雪',73:'中雪',75:'大雪',
+  80:'陣雨',81:'陣雨',82:'強陣雨',95:'雷陣雨',96:'雷陣雨',99:'強雷陣雨'
+};
+let lastWxFetch=0;
+async function fetchWeather(lat,lon){
+  if(Date.now()-lastWxFetch<60000) return;
+  lastWxFetch=Date.now();
+  try{
+    const url=`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code&timezone=auto`;
+    const r=await fetch(url);
+    const d=await r.json();
+    const c=d.current;
+    const code=c.weather_code;
+    document.getElementById('wx-icon').textContent = WX_CODES[code]||'🌡️';
+    document.getElementById('wx-temp').textContent = Math.round(c.temperature_2m);
+    document.getElementById('wx-desc').textContent = WX_DESC[code]||'未知';
+    document.getElementById('wx-humid').textContent = Math.round(c.relative_humidity_2m);
+    document.getElementById('wx-wind').textContent = Math.round(c.wind_speed_10m);
+  }catch(e){
+    document.getElementById('wx-desc').textContent='天氣載入失敗';
+  }
+}
+
+// Default: use Kaohsiung coords if no GPS
+fetchWeather(22.6273, 120.3014);
+
+// ════════════════════════════════════
+// 7. RADIO — Radio Browser API (real stations)
+// ════════════════════════════════════
+let stations=[], stIdx=0, playing=false, audioEl=document.getElementById('radio-audio');
+
+async function loadStations(){
+  try{
+    // Taiwan stations, TW country
+    const r=await fetch('https://de1.api.radio-browser.info/json/stations/bycountrycodeexact/TW?limit=30&order=votes&reverse=true&hidebroken=true');
+    const all=await r.json();
+    stations=all.filter(s=>s.url_resolved);
+    renderStationList();
+    if(stations.length) loadStation(0);
+  }catch(e){
+    document.getElementById('freq-name').textContent='電台載入失敗';
+  }
+}
+
+function renderStationList(){
+  const ul=document.getElementById('rb-list');
+  ul.innerHTML='';
+  stations.slice(0,15).forEach((s,i)=>{
+    const d=document.createElement('div');
+    d.className='rb-item'+(i===0?' active':'');
+    d.textContent=`${i+1}. ${s.name}`;
+    d.onclick=()=>loadStation(i);
+    ul.appendChild(d);
+  });
+}
+
+function loadStation(idx){
+  stIdx=Math.max(0,Math.min(idx,stations.length-1));
+  const s=stations[stIdx];
+  document.getElementById('freq-val').textContent=s.frequency?s.frequency+' MHz':'🎵 串流';
+  document.getElementById('freq-name').textContent=s.name;
+  audioEl.src=s.url_resolved;
+  document.querySelectorAll('.rb-item').forEach((el,i)=>{
+    el.classList.toggle('active',i===stIdx);
+    if(i===stIdx) el.scrollIntoView({block:'nearest'});
+  });
+  if(playing) audioEl.play().catch(()=>{});
+}
+
+document.getElementById('btn-play').onclick=()=>{
+  playing=!playing;
+  const btn=document.getElementById('btn-play');
+  const disc=document.getElementById('disc');
+  if(playing){
+    audioEl.play().catch(e=>{
+      document.getElementById('freq-name').textContent='播放失敗：'+e.message;
+      playing=false;
+    });
+    btn.innerHTML='&#9646;&#9646;';
+    btn.className='mb playing';
+    disc.className='disc';
+  } else {
+    audioEl.pause();
+    btn.innerHTML='&#9654;';
+    btn.className='mb';
+    disc.className='disc paused';
+  }
+};
+document.getElementById('btn-prev').onclick=()=>loadStation(stIdx-1);
+document.getElementById('btn-next').onclick=()=>loadStation(stIdx+1);
+
+// ════════════════════════════════════
+// 8. OBD-II via Web Serial API
+// ════════════════════════════════════
+let obdPort=null, obdReader=null, obdWriter=null;
+let obdConnected=false;
+
+document.getElementById('obd-btn').onclick=connectOBD;
+
+async function connectOBD(){
+  if(!('serial' in navigator)){
+    alert('您的瀏覽器不支援 Web Serial API。\n請使用 Chrome/Edge 桌面版。');return;
+  }
+  try{
+    obdPort=await navigator.serial.requestPort();
+    await obdPort.open({baudRate:38400});
+    obdConnected=true;
+    document.getElementById('obd-dot').style.background='var(--green)';
+    document.getElementById('obd-dot').style.boxShadow='0 0 6px var(--green)';
+    document.getElementById('obd-txt').textContent='OBD-II 已連接';
+    const enc=new TextEncoderStream();
+    enc.readable.pipeTo(obdPort.writable);
+    obdWriter=enc.writable.getWriter();
+    const dec=new TextDecoderStream();
+    obdPort.readable.pipeTo(dec.writable);
+    obdReader=dec.readable.getReader();
+    await initELM327();
+    loopOBD();
+  }catch(e){
+    document.getElementById('obd-txt').textContent='連接失敗：'+e.message;
+  }
+}
+
+async function sendOBD(cmd){
+  if(!obdWriter) return '';
+  await obdWriter.write(cmd+'\r');
+  let res='',t=Date.now();
+  while(Date.now()-t<1500){
+    const {value}=await obdReader.read();
+    res+=value||'';
+    if(res.includes('>')) break;
+  }
+  return res;
+}
+
+async function initELM327(){
+  await sendOBD('ATZ');   // Reset
+  await sendOBD('ATE0');  // Echo off
+  await sendOBD('ATL0');  // Linefeeds off
+  await sendOBD('ATSP0'); // Auto protocol
+}
+
+function parseOBD(raw){
+  return raw.replace(/\s/g,'').replace(/>/g,'').replace(/OK/g,'')
+            .replace(/SEARCHING/g,'').replace(/ATZ/g,'').replace(/[A-Z]{3,}/g,'');
+}
+
+async function loopOBD(){
+  if(!obdConnected) return;
+  async function query(pid){
+    const r=await sendOBD('01'+pid);
+    const clean=parseOBD(r);
+    const bytes=clean.split(/(?:41)+[0-9A-F]{2}/i).join('').match(/.{2}/g)||[];
+    return bytes.map(b=>parseInt(b,16));
+  }
+  async function tick(){
+    if(!obdConnected) return;
+    try{
+      // RPM: PID 0C
+      const rpm=await query('0C');
+      if(rpm.length>=2){
+        const v=((rpm[0]*256)+rpm[1])/4;
+        document.getElementById('obd-rpm').textContent=Math.round(v);
+        document.getElementById('obd-rpm-b').style.width=Math.min(v/7000*100,100)+'%';
+      }
+      // Coolant temp: PID 05
+      const temp=await query('05');
+      if(temp.length>=1){
+        const v=temp[0]-40;
+        document.getElementById('obd-temp').textContent=v;
+        document.getElementById('obd-temp-b').style.width=Math.min((v+40)/255*100,100)+'%';
+      }
+      // Fuel level: PID 2F
+      const fuel=await query('2F');
+      if(fuel.length>=1){
+        const v=Math.round(fuel[0]/2.55);
+        document.getElementById('obd-fuel').textContent=v;
+        document.getElementById('obd-fuel-b').style.width=v+'%';
+      }
+      // Battery voltage via AT RV (ELM extension)
+      const bv=await sendOBD('ATRV');
+      const vm=bv.match(/(\d+\.\d+)/);
+      if(vm){
+        document.getElementById('obd-bat').textContent=parseFloat(vm[1]).toFixed(1);
+        document.getElementById('obd-bat-b').style.width=Math.min((parseFloat(vm[1])-10)/4*100,100)+'%';
+      }
+    }catch(e){}
+    setTimeout(tick, 500);
+  }
+  tick();
+}
+
+// ════════════════════════════════════
+// 9. PERMISSIONS & INIT
+// ════════════════════════════════════
+initMap(22.6273, 120.3014); // Default Kaohsiung
+
+document.getElementById('grant-btn').onclick=async()=>{
+  document.getElementById('perm-modal').classList.remove('show');
+  gpsGranted=true;
+  startGPS();
+  startCompass();
+  await loadStations();
+};
+document.getElementById('skip-btn').onclick=async()=>{
+  document.getElementById('perm-modal').classList.remove('show');
+  updateSpeed(0);
+  setGPSBadge('err','GPS 未授權');
+  await loadStations();
+};
+
+// ════════════════════════════════════
+// 10. QUICKBAR
+// ════════════════════════════════════
+function qact(el){
+  document.querySelectorAll('.qi').forEach(q=>q.classList.remove('on'));
+  el.classList.add('on');
+}
+</script>
+</body>
+</html>
