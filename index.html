@@ -2,995 +2,982 @@
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>MBQ 真實行車輔助系統</title>
-<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Noto+Sans+TC:wght@300;400;500&display=swap" rel="stylesheet">
-<!-- Leaflet.js for map -->
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>MBQ 行車系統</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Noto+Sans+TC:wght@400;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<!-- Day.js for time -->
 <script src="https://unpkg.com/dayjs@1.11.10/dayjs.min.js"></script>
 <script src="https://unpkg.com/dayjs@1.11.10/locale/zh-tw.js"></script>
-<script src="https://unpkg.com/dayjs@1.11.10/plugin/duration.js"></script>
 
 <style>
 :root {
-  --amber: #f0a500;
-  --amber-glow: rgba(240,165,0,0.3);
-  --amber-dim: rgba(240,165,0,0.08);
-  --cyan: #00e5ff;
-  --cyan-glow: rgba(0,229,255,0.25);
-  --green: #00e676;
-  --red: #ff3b3b;
-  --blue: #1a78ff;
-  --bg: #07090d;
-  --bg-panel: #0b0f18;
-  --bg-card: #0f1520;
-  --bg-card2: #131c2a;
-  --border: rgba(255,255,255,0.07);
-  --border-amber: rgba(240,165,0,0.25);
-  --text: #dde4f0;
-  --text-dim: #4a5870;
-  --text-mid: #8a9ab5;
-  --font-hud: 'Orbitron', monospace;
-  --font-ui: 'Noto Sans TC', sans-serif;
-  --r: 14px;
+  --a:#f0a500; --ag:rgba(240,165,0,.3); --ad:rgba(240,165,0,.1);
+  --c:#00e5ff; --cg:rgba(0,229,255,.2);
+  --g:#00e676; --r:#ff3b3b;
+  --bg:#060810; --p1:#0c1220; --p2:#111928; --p3:#18243a;
+  --bo:rgba(255,255,255,.08); --boa:rgba(240,165,0,.25);
+  --t:#e8f0fe; --td:#5a6a88; --tm:#9ab0cc;
+  --hud:'Orbitron',monospace; --ui:'Noto Sans TC',sans-serif;
+  --touch:64px;
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%;overflow:hidden}
-body{
-  font-family:var(--font-ui);
-  background:var(--bg);
-  color:var(--text);
-  display:grid;
-  grid-template-rows:auto 1fr auto auto;
-  grid-template-columns:1fr;
-  height:100dvh;
-  overflow:hidden;
+html,body{height:100%;overflow:hidden;-webkit-tap-highlight-color:transparent}
+body{font-family:var(--ui);background:var(--bg);color:var(--t);
+  display:flex;flex-direction:column;height:100dvh}
+
+/* STATUS BAR */
+.sbar{height:44px;display:flex;justify-content:space-between;align-items:center;
+  padding:0 14px;background:#030508;border-bottom:1px solid var(--bo);flex-shrink:0}
+.snav{display:flex;gap:2px}
+.snb{width:44px;height:44px;display:flex;align-items:center;justify-content:center;
+  font-size:20px;color:var(--td);cursor:pointer;border-radius:8px;transition:background .15s}
+.snb:hover{background:rgba(255,255,255,.06);color:var(--t)}
+.sinfo{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--td)}
+.dot{width:8px;height:8px;border-radius:50%}
+.dot-g{background:var(--g);box-shadow:0 0 6px var(--g)}
+.dot-a{background:var(--a);box-shadow:0 0 6px var(--a)}
+.dot-o{background:#333}
+#sb-clk{font-family:var(--hud);font-size:16px;color:var(--c);letter-spacing:1px}
+
+/* PAGES */
+.page{display:none;flex:1;overflow:hidden;min-height:0}
+.page.on{display:flex}
+
+/* HOME */
+#pg-home{flex-direction:row;gap:8px;padding:8px}
+.col-l{width:210px;flex-shrink:0;display:flex;flex-direction:column;gap:8px}
+.col-c{flex:1;display:flex;flex-direction:column;gap:8px;min-width:0}
+.col-r{width:200px;flex-shrink:0;display:flex;flex-direction:column;gap:8px}
+@media(max-width:840px){
+  #pg-home{flex-wrap:wrap}
+  .col-l,.col-r{width:calc(50% - 12px)}
+  .col-c{width:100%;order:3;flex:none;height:280px}
+}
+@media(max-width:500px){
+  #pg-home{overflow-y:auto}
+  .col-l,.col-r{width:100%}
+  .col-c{height:240px}
+  html,body{height:auto;overflow:auto}
 }
 
-/* ─── STATUS BAR ─── */
-.sbar{
-  display:flex;justify-content:space-between;align-items:center;
-  padding:5px 14px;
-  background:#04060a;
-  border-bottom:1px solid var(--border);
-  font-family:var(--font-hud);font-size:11px;color:var(--text-dim);
-  flex-wrap:wrap;gap:6px;
-  position:relative;z-index:100;
-}
-.sbar-nav{display:flex;gap:16px}
-.sbar-nav span{cursor:pointer;font-size:15px;transition:color .2s}
-.sbar-nav span:hover{color:var(--amber)}
-.sbar-right{display:flex;gap:12px;align-items:center}
-#sb-clock{color:var(--cyan);font-size:12px;letter-spacing:1px}
-.s-dot{width:7px;height:7px;border-radius:50%;display:inline-block}
-.s-gps{background:var(--amber);box-shadow:0 0 6px var(--amber)}
-.s-gps.off{background:#333;box-shadow:none}
-.s-net{background:var(--green);box-shadow:0 0 6px var(--green)}
+/* CARD */
+.card{background:var(--p2);border:1px solid var(--bo);border-radius:14px;
+  padding:12px 14px;display:flex;flex-direction:column;gap:8px;position:relative;overflow:hidden}
+.card::before{content:'';position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(135deg,rgba(255,255,255,.025),transparent 55%)}
+.ct{font-family:var(--hud);font-size:10px;letter-spacing:2px;color:var(--td);
+  text-transform:uppercase;display:flex;align-items:center;gap:5px}
+.pip{width:5px;height:5px;border-radius:50%;background:var(--g);
+  box-shadow:0 0 4px var(--g);animation:blink 2s ease-in-out infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.15}}
 
-/* ─── MAIN BODY ─── */
-.main{
-  display:grid;
-  grid-template-columns:220px 1fr 200px;
-  grid-template-rows:1fr;
-  gap:8px;
-  padding:8px;
-  overflow:hidden;
-  min-height:0;
-}
-@media(max-width:900px){
-  .main{grid-template-columns:1fr 1fr;grid-template-rows:auto auto}
-  .map-panel{grid-column:1/-1;grid-row:2}
-}
-@media(max-width:540px){
-  .main{grid-template-columns:1fr;grid-template-rows:repeat(3,auto)}
-  .map-panel{grid-column:1;grid-row:3;height:200px}
-  body{overflow-y:auto}html,body{height:auto}
-}
+/* DATETIME — 大字 */
+.dt-ampm{font-family:var(--hud);font-size:12px;color:var(--td)}
+.dt-time{font-family:var(--hud);font-size:clamp(36px,5vw,52px);font-weight:900;
+  color:var(--a);text-shadow:0 0 22px var(--ag);letter-spacing:2px;line-height:1}
+.dt-day{font-size:18px;color:var(--tm);margin-top:2px;font-weight:700}
+.dt-date{font-family:var(--hud);font-size:12px;color:var(--td);margin-top:2px}
 
-/* ─── CARDS ─── */
-.card{
-  background:var(--bg-card);
-  border:1px solid var(--border);
-  border-radius:var(--r);
-  padding:12px 14px;
-  position:relative;
-  overflow:hidden;
-  display:flex;flex-direction:column;gap:8px;
-}
-.card::after{
-  content:'';position:absolute;inset:0;pointer-events:none;
-  background:linear-gradient(135deg,rgba(255,255,255,0.025) 0%,transparent 55%);
-}
-.ct{
-  font-family:var(--font-hud);font-size:9px;letter-spacing:2.5px;
-  text-transform:uppercase;color:var(--text-dim);
-  display:flex;align-items:center;gap:6px;
-}
-.ct .live-pip{
-  width:5px;height:5px;border-radius:50%;background:var(--green);
-  box-shadow:0 0 5px var(--green);
-  animation:blink 2s ease-in-out infinite;
-}
-@keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+/* WEATHER — 大字 */
+.wx-main{display:flex;align-items:center;gap:12px}
+.wx-ico{font-size:42px;line-height:1}
+.wx-tmp{font-family:var(--hud);font-size:38px;font-weight:900;
+  color:var(--c);text-shadow:0 0 14px var(--cg)}
+.wx-desc{font-size:18px;color:var(--tm);margin-top:3px;font-weight:700}
+.wx-chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{background:rgba(255,255,255,.05);border:1px solid var(--bo);border-radius:20px;
+  padding:5px 10px;font-size:14px;color:var(--tm);display:flex;align-items:center;gap:4px}
 
-/* ─── LEFT PANEL ─── */
-.left-panel{display:flex;flex-direction:column;gap:8px}
+/* COMPASS */
+.cmp-wrap{width:86px;height:86px;margin:4px auto}
+.cmp-wrap svg{width:100%;height:100%}
+.hdg{text-align:center;font-family:var(--hud);font-size:24px;font-weight:700;color:var(--a)}
+.hdg-d{text-align:center;font-size:14px;color:var(--tm);margin-top:2px}
 
-/* Datetime */
-.dt-card{}
-.dt-ampm{font-family:var(--font-hud);font-size:10px;color:var(--text-dim);letter-spacing:1px}
-.dt-time{
-  font-family:var(--font-hud);
-  font-size:clamp(30px,4vw,46px);
-  font-weight:900;
-  color:var(--amber);
-  text-shadow:0 0 18px var(--amber-glow),0 0 40px rgba(240,165,0,.15);
-  letter-spacing:2px;line-height:1.1;
-}
-.dt-date{font-family:var(--font-hud);font-size:11px;color:var(--text-dim);letter-spacing:1px;margin-top:2px}
-.dt-day{font-size:12px;color:var(--text-mid);margin-top:1px}
+/* SPEEDOMETER */
+.spd-card{background:radial-gradient(ellipse at 50% 115%,rgba(240,165,0,.1),transparent 65%),var(--p2);
+  border-color:var(--boa);align-items:center;flex-shrink:0}
+.arc-w{position:relative;width:160px;height:160px;margin:0 auto}
+.arc-w svg{width:100%;height:100%}
+.spd-ov{position:absolute;inset:0;display:flex;flex-direction:column;
+  align-items:center;justify-content:center}
+#spd-n{font-family:var(--hud);font-size:58px;font-weight:900;
+  color:var(--a);text-shadow:0 0 24px var(--ag);line-height:1}
+.spd-u{font-family:var(--hud);font-size:11px;color:var(--td);letter-spacing:2px;margin-top:3px}
+.gps-bdg{display:inline-flex;align-items:center;gap:5px;border-radius:20px;
+  padding:5px 12px;font-size:12px;font-family:var(--hud)}
+.bdg-ok{background:rgba(0,230,118,.1);border:1px solid rgba(0,230,118,.3);color:var(--g)}
+.bdg-w{background:var(--ad);border:1px solid var(--boa);color:var(--a)}
+.bdg-e{background:rgba(255,59,59,.08);border:1px solid rgba(255,59,59,.3);color:var(--r)}
+.spd-ext{display:flex;gap:20px;justify-content:center;
+  font-family:var(--hud);font-size:11px;color:var(--td);margin-top:4px}
+.se{display:flex;flex-direction:column;align-items:center;gap:2px}
+.se-v{font-size:16px;color:var(--t);font-weight:700}
 
-/* Weather card */
-.wx-card{}
-.wx-main{display:flex;align-items:center;gap:10px}
-.wx-icon{font-size:28px;line-height:1}
-.wx-temp{font-family:var(--font-hud);font-size:28px;font-weight:700;color:var(--cyan);text-shadow:0 0 14px var(--cyan-glow)}
-.wx-desc{font-size:11px;color:var(--text-mid);margin-top:3px}
-.wx-row{display:flex;gap:10px;margin-top:4px}
-.wx-chip{
-  background:rgba(255,255,255,0.04);border:1px solid var(--border);
-  border-radius:20px;padding:2px 8px;font-size:10px;color:var(--text-mid);
-  display:flex;align-items:center;gap:4px;
-}
+/* MAP */
+.map-panel{flex:1;min-height:0;border:1px solid var(--bo);border-radius:14px;
+  overflow:hidden;position:relative}
+#map{width:100%;height:100%;min-height:120px}
+.map-ov{position:absolute;top:8px;left:8px;right:8px;
+  display:flex;justify-content:space-between;pointer-events:none;z-index:400}
+.mchip{background:rgba(6,8,16,.88);border:1px solid var(--bo);border-radius:8px;
+  padding:5px 12px;font-family:var(--hud);font-size:12px;color:var(--tm);backdrop-filter:blur(4px)}
 
-/* Compass card */
-.compass-card{padding-bottom:10px}
-.compass-wrap{
-  position:relative;width:80px;height:80px;margin:0 auto;
-}
-.compass-wrap svg{width:100%;height:100%}
-#compass-needle{transform-origin:50% 50%;transition:transform .4s ease}
-.hdg-val{
-  text-align:center;font-family:var(--font-hud);font-size:18px;font-weight:700;
-  color:var(--amber);
-}
-.hdg-dir{text-align:center;font-size:11px;color:var(--text-mid);margin-top:2px}
-
-/* ─── CENTER: SPEED + MAP ─── */
-.center-panel{display:flex;flex-direction:column;gap:8px}
-.speed-card{
-  background:radial-gradient(ellipse at 50% 120%,rgba(240,165,0,.1) 0%,transparent 65%),var(--bg-card);
-  border-color:var(--border-amber);
-  align-items:center;
-  flex-shrink:0;
-}
-.arc-wrap{position:relative;width:160px;height:160px;margin:0 auto}
-.arc-wrap svg{width:100%;height:100%}
-.speed-overlay{
-  position:absolute;inset:0;
-  display:flex;flex-direction:column;align-items:center;justify-content:center;
-}
-#spd-num{
-  font-family:var(--font-hud);font-size:clamp(36px,5vw,50px);font-weight:900;
-  color:var(--amber);text-shadow:0 0 24px var(--amber-glow);line-height:1;
-}
-.spd-unit{font-family:var(--font-hud);font-size:10px;color:var(--text-dim);letter-spacing:2px;margin-top:2px}
-.speed-extras{
-  display:flex;gap:16px;justify-content:center;margin-top:4px;
-  font-family:var(--font-hud);font-size:10px;color:var(--text-dim);
-}
-.se-item{display:flex;flex-direction:column;align-items:center;gap:2px}
-.se-val{font-size:13px;color:var(--text);font-weight:600}
-
-/* GPS source badge */
-.gps-badge{
-  display:inline-flex;align-items:center;gap:5px;
-  border-radius:20px;padding:2px 8px;font-size:9px;
-  font-family:var(--font-hud);letter-spacing:1px;
-}
-.gps-badge.real{background:rgba(0,230,118,.1);border:1px solid rgba(0,230,118,.3);color:var(--green)}
-.gps-badge.waiting{background:rgba(240,165,0,.08);border:1px solid var(--border-amber);color:var(--amber)}
-.gps-badge.err{background:rgba(255,59,59,.08);border:1px solid rgba(255,59,59,.3);color:var(--red)}
-
-/* Map */
-.map-panel{
-  flex:1;min-height:0;
-  border:1px solid var(--border);border-radius:var(--r);
-  overflow:hidden;position:relative;
-}
-#map{width:100%;height:100%;min-height:160px}
-.map-overlay{
-  position:absolute;top:8px;left:8px;right:8px;
-  display:flex;justify-content:space-between;align-items:flex-start;
-  pointer-events:none;z-index:400;
-}
-.map-info-chip{
-  background:rgba(7,9,13,.85);
-  border:1px solid var(--border);
-  border-radius:8px;padding:4px 10px;
-  font-family:var(--font-hud);font-size:10px;color:var(--text-mid);
-  backdrop-filter:blur(6px);
-}
-
-/* ─── RIGHT PANEL ─── */
-.right-panel{display:flex;flex-direction:column;gap:8px}
-
-/* Radio */
-.radio-card{}
-.disc{
-  width:56px;height:56px;
-  background:conic-gradient(#222,#555,#888,#555,#222,#555,#888,#222);
-  border-radius:50%;margin:4px auto;position:relative;
-  animation:spin 3s linear infinite;
-  box-shadow:0 0 12px rgba(0,229,255,.15);
-}
-.disc::after{
-  content:'';position:absolute;inset:36%;
-  background:#0f1520;border-radius:50%;
-  border:2px solid #666;
-}
+/* RADIO */
+.disc{width:58px;height:58px;
+  background:conic-gradient(#111,#444,#999,#444,#111,#444,#999,#111);
+  border-radius:50%;margin:2px auto;position:relative;
+  animation:spin 3s linear infinite;box-shadow:0 0 12px rgba(0,229,255,.15)}
+.disc::after{content:'';position:absolute;inset:36%;background:var(--p2);
+  border-radius:50%;border:2px solid #555}
 @keyframes spin{to{transform:rotate(360deg)}}
 .disc.paused{animation-play-state:paused}
-.freq-val{
-  font-family:var(--font-hud);font-size:22px;font-weight:700;
-  color:var(--cyan);text-shadow:0 0 12px var(--cyan-glow);
-  text-align:center;
-}
-.freq-name{font-size:10px;color:var(--text-mid);text-align:center;min-height:14px;
-  overflow:hidden;white-space:nowrap;text-overflow:ellipsis;padding:0 4px}
-.media-row{display:flex;justify-content:center;gap:10px;margin-top:4px}
-.mb{
-  background:rgba(255,255,255,0.04);border:1px solid var(--border);
-  border-radius:8px;color:var(--text);width:32px;height:32px;
+.freq-v{font-family:var(--hud);font-size:22px;font-weight:700;
+  color:var(--c);text-shadow:0 0 12px var(--cg);text-align:center}
+.freq-n{font-size:14px;color:var(--tm);text-align:center;min-height:18px;
+  overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-weight:700}
+.mrow{display:flex;justify-content:center;gap:8px;margin-top:4px}
+.mb{background:rgba(255,255,255,.05);border:1px solid var(--bo);border-radius:10px;
+  color:var(--t);height:var(--touch);display:flex;align-items:center;justify-content:center;
+  cursor:pointer;font-size:22px;transition:all .2s;flex:1}
+.mb:hover,.mb:active{background:var(--ad);color:var(--a)}
+.mb.on{background:var(--cg);color:var(--c)}
+.rb-list{max-height:84px;overflow-y:auto;scrollbar-width:thin;
+  scrollbar-color:var(--bo) transparent}
+.rb-i{padding:7px 8px;font-size:14px;color:var(--tm);cursor:pointer;
+  border-radius:8px;transition:background .15s;min-height:38px;
+  display:flex;align-items:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:700}
+.rb-i:hover,.rb-i:active{background:rgba(255,255,255,.06);color:var(--t)}
+.rb-i.cur{color:var(--c);background:var(--cg)}
+
+/* HOME SHORTCUTS */
+.sc-home-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px;flex:1}
+.sc-home-item{display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:6px;padding:10px 6px;border-radius:12px;cursor:pointer;
+  border:1px solid var(--bo);background:var(--p3);
+  min-height:var(--touch);transition:all .2s}
+.sc-home-item:hover,.sc-home-item:active{border-color:var(--boa);background:var(--ad)}
+.sc-home-ico{font-size:24px;line-height:1}
+.sc-home-lbl{font-size:14px;color:var(--tm);text-align:center;font-weight:700;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:82px}
+
+/* APPS PAGE */
+#pg-apps{flex-direction:column;padding:10px;gap:10px;overflow-y:auto}
+.page-hdr{display:flex;align-items:center;justify-content:space-between;flex-shrink:0}
+.page-hdr h2{font-family:var(--hud);font-size:22px;color:var(--a);letter-spacing:1px}
+.apps-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px}
+.app-item{display:flex;flex-direction:column;align-items:center;gap:8px;
+  padding:16px 8px;border-radius:16px;cursor:pointer;
+  border:1px solid var(--bo);background:var(--p3);
+  transition:all .2s;min-height:110px;justify-content:center}
+.app-item:hover,.app-item:active{border-color:var(--boa);background:var(--ad);transform:scale(.97)}
+.app-ico{width:56px;height:56px;border-radius:15px;
   display:flex;align-items:center;justify-content:center;
-  cursor:pointer;font-size:13px;transition:all .2s;
-}
-.mb:hover{background:var(--amber-dim);color:var(--amber);box-shadow:0 0 8px var(--amber-glow)}
-.mb.playing{background:var(--cyan-glow);color:var(--cyan)}
-.rb-list{
-  max-height:80px;overflow-y:auto;scrollbar-width:thin;
-  scrollbar-color:var(--border) transparent;margin-top:4px;
-}
-.rb-item{
-  padding:4px 6px;font-size:10px;color:var(--text-mid);
-  cursor:pointer;border-radius:6px;transition:background .15s;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-}
-.rb-item:hover{background:rgba(255,255,255,.05);color:var(--text)}
-.rb-item.active{color:var(--cyan);background:var(--cyan-glow)}
+  font-size:28px;box-shadow:0 4px 14px rgba(0,0,0,.6)}
+.app-ico img{width:100%;height:100%;object-fit:cover;border-radius:inherit}
+.app-lbl{font-size:16px;color:var(--tm);text-align:center;font-weight:700;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100px}
 
-/* OBD card */
-.obd-card{}
-.obd-status{
-  display:flex;align-items:center;gap:6px;
-  font-size:10px;color:var(--text-mid);
-  border:1px solid var(--border);border-radius:8px;
-  padding:5px 8px;cursor:pointer;transition:border-color .2s;
-  margin-bottom:4px;
-}
-.obd-status:hover{border-color:var(--amber)}
-.obd-status .s-dot{flex-shrink:0}
-.obd-gauges{display:grid;grid-template-columns:1fr 1fr;gap:6px}
-.og{
-  background:var(--bg-card2);border:1px solid var(--border);
-  border-radius:10px;padding:7px 8px;
-}
-.og-label{font-family:var(--font-hud);font-size:8px;letter-spacing:1.5px;color:var(--text-dim);text-transform:uppercase}
-.og-val{font-family:var(--font-hud);font-size:16px;font-weight:700;margin-top:2px}
-.og-bar{height:3px;background:rgba(255,255,255,.05);border-radius:2px;margin-top:5px;overflow:hidden}
-.og-fill{height:100%;border-radius:2px;transition:width .8s ease}
-.og.fuel .og-val{color:var(--amber)} .og.fuel .og-fill{background:linear-gradient(90deg,#f06000,var(--amber))}
-.og.rpm .og-val{color:var(--green)} .og.rpm .og-fill{background:linear-gradient(90deg,#00b050,var(--green))}
-.og.temp .og-val{color:var(--cyan)} .og.temp .og-fill{background:linear-gradient(90deg,#0090c0,var(--cyan))}
-.og.bat .og-val{color:#b388ff} .og.bat .og-fill{background:linear-gradient(90deg,#7c4dff,#b388ff)}
+/* SHORTCUTS PAGE */
+#pg-sc{flex-direction:column;padding:10px;gap:10px;overflow-y:auto}
 
-/* ─── ALERT ─── */
-.alert-bar{
-  display:none;
-  background:linear-gradient(90deg,rgba(255,59,59,.18),transparent);
-  border-top:2px solid var(--red);
-  padding:5px 14px;
-  font-size:11px;color:#ff8a80;
-  align-items:center;gap:8px;
-  animation:slideIn .3s ease;
-  font-family:var(--font-hud);
-}
-@keyframes slideIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+/* BUTTONS — 大觸控 */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;
+  padding:0 20px;height:var(--touch);border-radius:12px;
+  font-size:18px;font-weight:700;cursor:pointer;border:2px solid;
+  font-family:var(--ui);transition:all .2s;white-space:nowrap}
+.btn-a{background:var(--a);border-color:var(--a);color:#000}
+.btn-a:hover{opacity:.85}
+.btn-s{background:transparent;border-color:var(--bo);color:var(--tm)}
+.btn-s:hover{border-color:var(--a);color:var(--a)}
+.btn-g{background:rgba(0,230,118,.12);border-color:rgba(0,230,118,.35);color:var(--g)}
+.btn-g:hover{background:rgba(0,230,118,.22)}
+.btn-c{background:rgba(0,229,255,.1);border-color:rgba(0,229,255,.3);color:var(--c)}
+.btn-c:hover{background:rgba(0,229,255,.2)}
 
-/* ─── QUICKBAR ─── */
-.qbar{
-  display:flex;
-  background:#04060a;
-  border-top:1px solid var(--border);
-  overflow-x:auto;scrollbar-width:none;
-}
+/* IO AREA */
+.io-area{background:var(--p2);border:1px solid var(--bo);border-radius:14px;
+  padding:16px;display:flex;flex-direction:column;gap:12px;flex-shrink:0}
+.io-area h3{font-family:var(--hud);font-size:18px;color:var(--a);letter-spacing:1px}
+.io-note{background:rgba(0,229,255,.06);border:1px solid rgba(0,229,255,.2);border-radius:10px;
+  padding:12px 16px;font-size:16px;color:var(--tm);line-height:1.8}
+.io-note b{color:var(--c)}
+.io-btns{display:flex;gap:10px;flex-wrap:wrap}
+.file-lbl{display:inline-flex;align-items:center;justify-content:center;gap:7px;
+  padding:0 20px;height:var(--touch);border-radius:12px;
+  font-size:18px;font-weight:700;cursor:pointer;
+  border:2px solid rgba(0,229,255,.3);color:var(--c);
+  background:rgba(0,229,255,.1);transition:all .2s;white-space:nowrap}
+.file-lbl:hover{background:rgba(0,229,255,.2)}
+.file-lbl input{display:none}
+#import-status{font-size:16px;color:var(--tm);display:none;
+  padding:10px 14px;background:var(--p3);border-radius:10px;font-weight:700}
+
+/* SHORTCUT GRID */
+.sc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}
+.sc-item{display:flex;flex-direction:column;align-items:center;gap:7px;
+  padding:16px 10px;border-radius:16px;
+  border:1px solid var(--bo);background:var(--p3);
+  position:relative;min-height:130px;justify-content:center;cursor:pointer;transition:all .2s}
+.sc-item:hover{border-color:var(--boa)}
+.sc-ico{width:56px;height:56px;border-radius:14px;
+  display:flex;align-items:center;justify-content:center;font-size:28px;
+  box-shadow:0 3px 10px rgba(0,0,0,.5)}
+.sc-ico img{width:100%;height:100%;object-fit:cover;border-radius:inherit}
+.sc-name{font-size:16px;color:var(--t);text-align:center;font-weight:700;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px}
+.sc-url{font-size:12px;color:var(--td);text-align:center;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px}
+.sc-acts{position:absolute;top:0;left:0;right:0;bottom:0;border-radius:16px;
+  background:rgba(6,8,16,.82);display:none;align-items:center;
+  justify-content:center;gap:12px}
+.sc-item:hover .sc-acts{display:flex}
+.sc-ab{width:52px;height:52px;border-radius:12px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:22px;cursor:pointer;border:1px solid var(--bo);
+  background:var(--p2);transition:all .15s}
+.sc-ab:hover{transform:scale(1.1)}
+
+/* MODAL */
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.78);
+  backdrop-filter:blur(8px);z-index:9000;align-items:center;justify-content:center;padding:12px}
+.overlay.on{display:flex}
+.modal{background:var(--p1);border:1px solid var(--boa);border-radius:18px;
+  padding:20px;width:100%;max-width:480px;max-height:92vh;
+  overflow-y:auto;display:flex;flex-direction:column;gap:14px}
+.modal h3{font-family:var(--hud);font-size:20px;color:var(--a)}
+.frow{display:flex;flex-direction:column;gap:6px}
+.frow label{font-size:13px;color:var(--td);letter-spacing:1px;
+  font-family:var(--hud);text-transform:uppercase}
+.frow input{background:var(--p3);border:2px solid var(--bo);border-radius:10px;
+  color:var(--t);padding:14px 16px;font-size:20px;font-family:var(--ui);
+  outline:none;transition:border-color .2s;width:100%;min-height:var(--touch)}
+.frow input:focus{border-color:var(--a)}
+.ico-pv-wrap{display:flex;align-items:center;gap:14px}
+.ico-pv{width:68px;height:68px;border-radius:16px;
+  display:flex;align-items:center;justify-content:center;font-size:34px;
+  border:2px solid var(--boa);box-shadow:0 4px 14px rgba(0,0,0,.5);flex-shrink:0}
+.ico-pv img{width:100%;height:100%;object-fit:cover;border-radius:inherit}
+.emoji-scroll{display:flex;flex-wrap:wrap;gap:6px;max-height:160px;overflow-y:auto;
+  border:2px solid var(--bo);border-radius:10px;padding:8px;background:var(--p3)}
+.ep{width:48px;height:48px;border-radius:10px;display:flex;align-items:center;
+  justify-content:center;font-size:26px;cursor:pointer;
+  border:2px solid transparent;transition:all .15s}
+.ep:hover,.ep.on{background:var(--ad);border-color:var(--a)}
+.col-row{display:flex;flex-wrap:wrap;gap:8px}
+.csw{width:40px;height:40px;border-radius:10px;cursor:pointer;
+  border:3px solid transparent;transition:all .15s}
+.csw.on{border-color:#fff;transform:scale(1.18)}
+.modal-btns{display:flex;gap:10px;justify-content:flex-end}
+
+/* ALERT */
+.alert-bar{display:none;background:linear-gradient(90deg,rgba(255,59,59,.2),transparent);
+  border-top:3px solid var(--r);padding:8px 16px;
+  font-size:20px;color:#ff8a80;font-weight:700;
+  align-items:center;gap:10px;font-family:var(--hud);flex-shrink:0}
+
+/* QUICKBAR — 大觸控 */
+.qbar{display:flex;background:#030508;border-top:1px solid var(--bo);
+  flex-shrink:0;overflow-x:auto;scrollbar-width:none}
 .qbar::-webkit-scrollbar{display:none}
-.qi{
-  flex:1;min-width:64px;
-  display:flex;flex-direction:column;align-items:center;justify-content:center;
-  padding:8px 4px;cursor:pointer;
-  border-right:1px solid var(--border);
-  transition:background .2s;gap:3px;position:relative;
-}
+.qi{flex:1;min-width:72px;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  min-height:66px;cursor:pointer;
+  border-right:1px solid var(--bo);transition:background .2s;gap:4px}
 .qi:last-child{border-right:none}
-.qi:hover{background:rgba(255,255,255,.03)}
-.qi.on{background:var(--amber-dim)}
-.qi.on .qi-lbl{color:var(--amber)}
-.qi-ico{font-size:18px}
-.qi-lbl{font-size:9px;color:var(--text-dim);letter-spacing:.5px;white-space:nowrap}
-.qi-pip{
-  position:absolute;top:5px;right:10px;
-  width:6px;height:6px;border-radius:50%;
-  background:var(--red);box-shadow:0 0 5px var(--red);
-  animation:blink 1.2s ease-in-out infinite;
-}
+.qi:hover,.qi:active{background:rgba(255,255,255,.04)}
+.qi.on{background:var(--ad)}
+.qi.on .qi-l{color:var(--a)}
+.qi-i{font-size:24px}
+.qi-l{font-size:14px;color:var(--td);letter-spacing:.5px;font-weight:700}
 
-/* Permissions modal */
-.modal{
-  display:none;position:fixed;inset:0;
-  background:rgba(0,0,0,.75);backdrop-filter:blur(8px);
-  z-index:9999;align-items:center;justify-content:center;
-}
-.modal.show{display:flex}
-.modal-box{
-  background:var(--bg-card);border:1px solid var(--border-amber);
-  border-radius:16px;padding:24px;max-width:340px;width:90%;
-  text-align:center;
-}
-.modal-box h2{font-family:var(--font-hud);font-size:16px;color:var(--amber);margin-bottom:12px}
-.modal-box p{font-size:13px;color:var(--text-mid);line-height:1.6;margin-bottom:16px}
-.modal-btn{
-  background:var(--amber);color:#000;font-family:var(--font-hud);
-  font-size:12px;font-weight:700;letter-spacing:1px;
-  border:none;border-radius:8px;padding:10px 24px;cursor:pointer;
-  transition:opacity .2s;display:block;width:100%;margin-bottom:8px;
-}
-.modal-btn:hover{opacity:.85}
-.modal-btn.sec{background:transparent;color:var(--text-dim);border:1px solid var(--border)}
+/* TOAST */
+#toast{position:fixed;bottom:84px;left:50%;transform:translateX(-50%);
+  background:var(--p1);border:2px solid var(--boa);border-radius:14px;
+  padding:14px 28px;font-size:18px;color:var(--a);
+  font-family:var(--hud);z-index:99999;
+  box-shadow:0 6px 28px rgba(0,0,0,.7);
+  opacity:0;transition:opacity .3s;white-space:nowrap;pointer-events:none}
 </style>
 </head>
 <body>
 
-<!-- Permission Modal -->
-<div class="modal show" id="perm-modal">
-  <div class="modal-box">
-    <h2>📡 需要裝置權限</h2>
-    <p>此系統需要存取：<br>
-    • <b>GPS 位置</b>（取得真實車速、方向）<br>
-    • <b>設備方向</b>（羅盤）<br>
-    授權後將顯示真實行車數據。</p>
-    <button class="modal-btn" id="grant-btn">授權並啟動</button>
-    <button class="modal-btn sec" id="skip-btn">略過（使用受限模式）</button>
-  </div>
-</div>
-
 <!-- STATUS BAR -->
 <div class="sbar">
-  <div class="sbar-nav">
-    <span title="返回">&#8592;</span>
-    <span title="首頁">&#8962;</span>
-    <span title="多工">&#9634;</span>
+  <div class="snav">
+    <div class="snb" onclick="goHome()">◀</div>
+    <div class="snb" onclick="goHome()">⌂</div>
+    <div class="snb">⧉</div>
   </div>
-  <div style="display:flex;gap:10px;align-items:center;font-size:10px">
-    <span class="s-dot s-gps off" id="gps-dot" title="GPS狀態"></span>GPS
-    <span class="s-dot s-net" title="網路"></span>網路
-    <span id="sb-bt" style="font-size:12px;color:var(--text-dim)">⚡</span>
+  <div class="sinfo">
+    <span class="dot dot-o" id="gps-dot"></span>GPS
+    <span class="dot dot-g"></span>網路
   </div>
-  <div class="sbar-right">
-    <span id="sb-clock">--:--</span>
-  </div>
+  <span id="sb-clk">--:--</span>
 </div>
 
-<!-- MAIN -->
-<div class="main">
+<!-- ══ HOME ══ -->
+<div class="page on" id="pg-home">
 
-  <!-- LEFT -->
-  <div class="left-panel">
-
-    <!-- DateTime -->
-    <div class="card dt-card">
-      <div class="ct"><div class="live-pip"></div>系統時間</div>
+  <div class="col-l">
+    <div class="card">
+      <div class="ct"><div class="pip"></div>系統時間</div>
       <div class="dt-ampm" id="ampm">--</div>
       <div class="dt-time" id="clock">--:--</div>
       <div class="dt-day" id="weekday">-</div>
       <div class="dt-date" id="datedisp">----/--/--</div>
     </div>
-
-    <!-- Weather -->
-    <div class="card wx-card">
-      <div class="ct"><div class="live-pip"></div>即時天氣</div>
+    <div class="card">
+      <div class="ct"><div class="pip"></div>即時天氣</div>
       <div class="wx-main">
-        <div class="wx-icon" id="wx-icon">⏳</div>
+        <div class="wx-ico" id="wx-ico">⏳</div>
         <div>
-          <div class="wx-temp"><span id="wx-temp">--</span>°C</div>
-          <div class="wx-desc" id="wx-desc">載入中…</div>
+          <div class="wx-tmp"><span id="wx-t">--</span>°</div>
+          <div class="wx-desc" id="wx-d">定位中</div>
         </div>
       </div>
-      <div class="wx-row">
-        <div class="wx-chip">💧 <span id="wx-humid">--</span>%</div>
-        <div class="wx-chip">🌬 <span id="wx-wind">--</span> km/h</div>
-        <div class="wx-chip" id="wx-loc-chip" style="font-size:9px">📍定位中</div>
+      <div class="wx-chips">
+        <div class="chip">💧<span id="wx-h">--</span>%</div>
+        <div class="chip">🌬<span id="wx-w">--</span></div>
+        <div class="chip" id="wx-loc" style="font-size:13px">📍…</div>
       </div>
     </div>
-
-    <!-- Compass -->
-    <div class="card compass-card">
-      <div class="ct">方向羅盤</div>
-      <div class="compass-wrap">
-        <svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">
-          <!-- Ring -->
-          <circle cx="40" cy="40" r="38" fill="none" stroke="rgba(255,255,255,.06)" stroke-width="2"/>
-          <!-- Cardinal -->
-          <text x="40" y="9" text-anchor="middle" font-family="Orbitron" font-size="7" fill="rgba(255,59,59,.8)">N</text>
-          <text x="40" y="75" text-anchor="middle" font-family="Orbitron" font-size="6" fill="rgba(255,255,255,.3)">S</text>
-          <text x="73" y="43" text-anchor="middle" font-family="Orbitron" font-size="6" fill="rgba(255,255,255,.3)">E</text>
-          <text x="7" y="43" text-anchor="middle" font-family="Orbitron" font-size="6" fill="rgba(255,255,255,.3)">W</text>
-          <!-- Needle -->
-          <g id="compass-needle">
-            <polygon points="40,14 37,40 40,46 43,40" fill="var(--red)" opacity=".9"/>
-            <polygon points="40,66 37,40 40,34 43,40" fill="rgba(255,255,255,.25)"/>
-            <circle cx="40" cy="40" r="3" fill="var(--bg-card)" stroke="rgba(255,255,255,.2)" stroke-width="1"/>
+    <div class="card">
+      <div class="ct">羅盤方向</div>
+      <div class="cmp-wrap">
+        <svg viewBox="0 0 86 86" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="43" cy="43" r="40" fill="none" stroke="rgba(255,255,255,.05)" stroke-width="2"/>
+          <text x="43" y="10" text-anchor="middle" font-family="Orbitron" font-size="8" fill="rgba(255,59,59,.9)">N</text>
+          <text x="43" y="81" text-anchor="middle" font-family="Orbitron" font-size="7" fill="rgba(255,255,255,.2)">S</text>
+          <text x="80" y="46" text-anchor="middle" font-family="Orbitron" font-size="7" fill="rgba(255,255,255,.2)">E</text>
+          <text x="6"  y="46" text-anchor="middle" font-family="Orbitron" font-size="7" fill="rgba(255,255,255,.2)">W</text>
+          <g id="needle" style="transform-origin:43px 43px;transition:transform .4s">
+            <polygon points="43,13 40,43 43,49 46,43" fill="var(--r)" opacity=".95"/>
+            <polygon points="43,73 40,43 43,37 46,43" fill="rgba(255,255,255,.2)"/>
+            <circle cx="43" cy="43" r="3" fill="var(--p2)" stroke="rgba(255,255,255,.25)" stroke-width="1.5"/>
           </g>
         </svg>
       </div>
-      <div class="hdg-val" id="hdg-val">--°</div>
-      <div class="hdg-dir" id="hdg-dir">等待感測器</div>
+      <div class="hdg" id="hdg">--°</div>
+      <div class="hdg-d" id="hdg-d">等待感測器</div>
     </div>
-
   </div>
 
-  <!-- CENTER -->
-  <div class="center-panel">
-
-    <!-- Speedometer -->
-    <div class="card speed-card">
-      <div class="ct" style="justify-content:center"><div class="live-pip"></div>GPS 真實車速</div>
-      <div class="arc-wrap">
+  <div class="col-c">
+    <div class="card spd-card">
+      <div class="ct" style="justify-content:center"><div class="pip"></div>GPS 車速</div>
+      <div class="arc-w">
         <svg viewBox="0 0 160 160" xmlns="http://www.w3.org/2000/svg">
           <defs>
-            <linearGradient id="spdGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <linearGradient id="sg" x1="0%" y1="0%" x2="100%" y2="0%">
               <stop offset="0%" stop-color="#f0a500"/>
               <stop offset="100%" stop-color="#ffdd44"/>
             </linearGradient>
-            <filter id="glow"><feGaussianBlur stdDeviation="2.5"/></filter>
+            <filter id="gf"><feGaussianBlur stdDeviation="2.5"/></filter>
           </defs>
-          <!-- BG arc -->
           <path id="a-bg" fill="none" stroke="rgba(255,255,255,.05)" stroke-width="12" stroke-linecap="round"/>
-          <!-- Glow -->
-          <path id="a-glow" fill="none" stroke="rgba(240,165,0,.2)" stroke-width="16" stroke-linecap="round" filter="url(#glow)"/>
-          <!-- Active -->
-          <path id="a-fill" fill="none" stroke="url(#spdGrad)" stroke-width="10" stroke-linecap="round"/>
-          <!-- Ticks -->
-          <g id="ticks"></g>
+          <path id="a-gl" fill="none" stroke="rgba(240,165,0,.18)" stroke-width="16" stroke-linecap="round" filter="url(#gf)"/>
+          <path id="a-f"  fill="none" stroke="url(#sg)" stroke-width="10" stroke-linecap="round"/>
+          <g id="sticks"></g>
         </svg>
-        <div class="speed-overlay">
-          <div id="spd-num">0</div>
-          <div class="spd-unit">公里/時</div>
+        <div class="spd-ov">
+          <div id="spd-n">0</div>
+          <div class="spd-u">公里/時</div>
         </div>
       </div>
-      <div style="display:flex;justify-content:center;margin-top:2px">
-        <div class="gps-badge waiting" id="gps-badge">⏳ 等待 GPS</div>
+      <div style="display:flex;justify-content:center">
+        <div class="gps-bdg bdg-w" id="gps-bdg">⏳ 等待GPS</div>
       </div>
-      <div class="speed-extras">
-        <div class="se-item"><div class="se-val" id="acc-val">--</div><div>m/s²</div></div>
-        <div class="se-item"><div class="se-val" id="alt-val">--</div><div>海拔m</div></div>
-        <div class="se-item"><div class="se-val" id="acc-m-val">--</div><div>精度m</div></div>
+      <div class="spd-ext">
+        <div class="se"><div class="se-v" id="alt-v">--</div><div>海拔m</div></div>
+        <div class="se"><div class="se-v" id="acc-v">--</div><div>精度m</div></div>
       </div>
     </div>
-
-    <!-- Map -->
     <div class="map-panel">
       <div id="map"></div>
-      <div class="map-overlay">
-        <div class="map-info-chip" id="map-coords">📍 定位中…</div>
-        <div class="map-info-chip" id="map-spd2">-- km/h</div>
+      <div class="map-ov">
+        <div class="mchip" id="m-coord">📍定位中…</div>
+        <div class="mchip" id="m-spd">-- km/h</div>
       </div>
     </div>
-
   </div>
 
-  <!-- RIGHT -->
-  <div class="right-panel">
-
-    <!-- Radio -->
-    <div class="card radio-card">
-      <div class="ct"><div class="live-pip"></div>線上廣播</div>
+  <div class="col-r">
+    <div class="card">
+      <div class="ct"><div class="pip"></div>線上廣播</div>
       <div class="disc" id="disc"></div>
-      <div class="freq-val" id="freq-val">--</div>
-      <div class="freq-name" id="freq-name">載入電台中…</div>
-      <div class="media-row">
-        <button class="mb" id="btn-prev" title="上一台">&#9664;&#9664;</button>
-        <button class="mb playing" id="btn-play" title="播放/暫停">&#9646;&#9646;</button>
-        <button class="mb" id="btn-next" title="下一台">&#9654;&#9654;</button>
+      <div class="freq-v" id="freq-v">--</div>
+      <div class="freq-n" id="freq-n">載入中…</div>
+      <div class="mrow">
+        <button class="mb" id="r-prev">⏮</button>
+        <button class="mb on" id="r-play">⏸</button>
+        <button class="mb" id="r-next">⏭</button>
       </div>
       <div class="rb-list" id="rb-list"></div>
-      <audio id="radio-audio" preload="none"></audio>
+      <audio id="audio" preload="none"></audio>
     </div>
-
-    <!-- OBD -->
-    <div class="card obd-card">
-      <div class="ct">OBD-II 車況</div>
-      <div class="obd-status" id="obd-btn" title="點擊連接 OBD 裝置">
-        <span class="s-dot" id="obd-dot" style="background:#333"></span>
-        <span id="obd-txt">點擊連接 OBD-II 裝置</span>
-      </div>
-      <div class="obd-gauges">
-        <div class="og fuel">
-          <div class="og-label">燃油</div>
-          <div class="og-val"><span id="obd-fuel">--</span>%</div>
-          <div class="og-bar"><div class="og-fill" id="obd-fuel-b" style="width:0%"></div></div>
-        </div>
-        <div class="og rpm">
-          <div class="og-label">轉速</div>
-          <div class="og-val"><span id="obd-rpm">--</span></div>
-          <div class="og-bar"><div class="og-fill" id="obd-rpm-b" style="width:0%"></div></div>
-        </div>
-        <div class="og temp">
-          <div class="og-label">水溫</div>
-          <div class="og-val"><span id="obd-temp">--</span>°C</div>
-          <div class="og-bar"><div class="og-fill" id="obd-temp-b" style="width:0%"></div></div>
-        </div>
-        <div class="og bat">
-          <div class="og-label">電瓶</div>
-          <div class="og-val"><span id="obd-bat">--</span>V</div>
-          <div class="og-bar"><div class="og-fill" id="obd-bat-b" style="width:0%"></div></div>
-        </div>
-      </div>
-      <div style="font-size:9px;color:var(--text-dim);margin-top:4px;line-height:1.5">
-        需配合 ELM327 OBD-II 藍牙/USB 裝置<br>透過 Web Serial API 讀取真實數值
-      </div>
+    <div class="card" style="flex:1">
+      <div class="ct">常用捷徑</div>
+      <div class="sc-home-grid" id="home-sc"></div>
+      <button class="btn btn-s" style="width:100%;margin-top:auto;font-size:16px"
+        onclick="showPage('pg-sc');qact(document.getElementById('qi-sc'))">
+        管理捷徑 ›
+      </button>
     </div>
-
   </div>
 
+</div>
+
+<!-- ══ APPS ══ -->
+<div class="page" id="pg-apps" style="flex-direction:column;padding:10px;gap:10px;overflow-y:auto">
+  <div class="page-hdr"><h2>📱 應用程式</h2></div>
+  <div class="apps-grid" id="apps-grid"></div>
+</div>
+
+<!-- ══ SHORTCUTS ══ -->
+<div class="page" id="pg-sc" style="flex-direction:column;padding:10px;gap:10px;overflow-y:auto">
+  <div class="page-hdr">
+    <h2>⭐ 自訂捷徑</h2>
+    <button class="btn btn-a" onclick="openAdd()">＋ 新增</button>
+  </div>
+
+  <div class="io-area">
+    <h3>📁 匯入 / 匯出</h3>
+    <div class="io-note">
+      格式：<b>名稱, 圖示, 背景色, 網址, 說明</b>（CSV 格式，Excel 可直接開啟）<br>
+      ① 按「匯出 CSV」下載範本　② 用 Excel 編輯　③ 按「匯入 CSV」選擇檔案
+    </div>
+    <div class="io-btns">
+      <button class="btn btn-g" onclick="doExport()">⬇ 匯出 CSV</button>
+      <label class="file-lbl">
+        ⬆ 匯入 CSV / xlsx
+        <input type="file" id="file-input" accept=".csv,.xlsx,.xls">
+      </label>
+    </div>
+    <div id="import-status"></div>
+  </div>
+
+  <div class="sc-grid" id="sc-grid"></div>
 </div>
 
 <!-- ALERT -->
-<div class="alert-bar" id="alert-bar">
-  <span>⚠️</span><span id="alert-msg">警告</span>
-</div>
+<div class="alert-bar" id="alert-bar">⚠️ <span id="alert-msg"></span></div>
 
 <!-- QUICKBAR -->
 <div class="qbar">
-  <div class="qi on" onclick="qact(this)">
-    <div class="qi-ico">🗺️</div><div class="qi-lbl">導航</div>
+  <div class="qi on" id="qi-home" onclick="showPage('pg-home');qact(this)">
+    <div class="qi-i">🏠</div><div class="qi-l">首頁</div>
   </div>
-  <div class="qi" onclick="qact(this)">
-    <div class="qi-ico">📻</div><div class="qi-lbl">廣播</div>
+  <div class="qi" id="qi-apps" onclick="showPage('pg-apps');qact(this)">
+    <div class="qi-i">📱</div><div class="qi-l">應用</div>
   </div>
-  <div class="qi" onclick="qact(this)">
-    <div class="qi-ico">⚙️</div><div class="qi-lbl">OBD</div>
+  <div class="qi" id="qi-sc" onclick="showPage('pg-sc');qact(this)">
+    <div class="qi-i">⭐</div><div class="qi-l">捷徑</div>
   </div>
-  <div class="qi" onclick="qact(this)">
-    <div class="qi-ico">📱</div><div class="qi-lbl">應用</div>
-    <div class="qi-pip"></div>
+  <div class="qi" onclick="toggleRadio()">
+    <div class="qi-i">📻</div><div class="qi-l">廣播</div>
   </div>
-  <div class="qi" onclick="qact(this)">
-    <div class="qi-ico">🌤️</div><div class="qi-lbl">天氣</div>
-  </div>
-  <div class="qi" onclick="qact(this)">
-    <div class="qi-ico">🔊</div><div class="qi-lbl">音量</div>
+  <div class="qi" onclick="startGPS()">
+    <div class="qi-i">📡</div><div class="qi-l">GPS</div>
   </div>
 </div>
 
+<!-- MODAL -->
+<div class="overlay" id="modal-ov">
+  <div class="modal">
+    <h3 id="modal-title">新增捷徑</h3>
+    <input type="hidden" id="edit-idx" value="-1">
+    <div class="ico-pv-wrap">
+      <div class="ico-pv" id="ico-pv" style="background:#1565c0">🔗</div>
+      <div style="flex:1;display:flex;flex-direction:column;gap:10px">
+        <div class="frow">
+          <label>名稱</label>
+          <input id="f-name" type="text" placeholder="例：Google 地圖" maxlength="14">
+        </div>
+        <div class="frow">
+          <label>網址</label>
+          <input id="f-url" type="text" placeholder="https://...">
+        </div>
+      </div>
+    </div>
+    <div class="frow">
+      <label>選擇圖示</label>
+      <div class="emoji-scroll" id="emoji-scroll"></div>
+    </div>
+    <div class="frow">
+      <label>或貼上圖片網址</label>
+      <input id="f-img" type="text" placeholder="https://example.com/icon.png" oninput="onImgUrl(this.value)">
+    </div>
+    <div class="frow">
+      <label>背景色</label>
+      <div class="col-row" id="col-row"></div>
+    </div>
+    <div class="modal-btns">
+      <button class="btn btn-s" onclick="closeModal()">取消</button>
+      <button class="btn btn-a" onclick="saveSC_item()">儲存</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
 <script>
-// ════════════════════════════════════
-// 1. DAYJS LOCALE
-// ════════════════════════════════════
+'use strict';
 dayjs.locale('zh-tw');
+function $(id){return document.getElementById(id)}
 
-// ════════════════════════════════════
-// 2. CLOCK (real)
-// ════════════════════════════════════
-function tickClock() {
-  const now = dayjs();
-  const h = now.hour(), m = now.minute();
-  const pm = h >= 12 ? 'PM' : 'AM';
-  const h12 = h % 12 || 12;
-  const pad = n => String(n).padStart(2,'0');
-  document.getElementById('clock').textContent = `${pad(h12)}:${pad(m)}`;
-  document.getElementById('sb-clock').textContent = `${pad(h12)}:${pad(m)}`;
-  document.getElementById('ampm').textContent = pm;
-  const days = ['星期日','星期一','星期二','星期三','星期四','星期五','星期六'];
-  document.getElementById('weekday').textContent = days[now.day()];
-  document.getElementById('datedisp').textContent = now.format('YYYY/MM/DD');
+/* ── CLOCK ── */
+function tickClock(){
+  const n=dayjs(),h=n.hour(),m=n.minute();
+  const pm=h>=12?'PM':'AM',h12=h%12||12,p=x=>String(x).padStart(2,'0');
+  $('clock').textContent=`${p(h12)}:${p(m)}`;
+  $('sb-clk').textContent=`${p(h12)}:${p(m)}`;
+  $('ampm').textContent=pm;
+  const days=['星期日','星期一','星期二','星期三','星期四','星期五','星期六'];
+  $('weekday').textContent=days[n.day()];
+  $('datedisp').textContent=n.format('YYYY/MM/DD');
 }
-tickClock();
-setInterval(tickClock, 1000);
+tickClock();setInterval(tickClock,1000);
 
-// ════════════════════════════════════
-// 3. SPEEDOMETER ARC (SVG)
-// ════════════════════════════════════
+/* ── PAGE SWITCH ── */
+function showPage(id){document.querySelectorAll('.page').forEach(p=>p.classList.remove('on'));$(id).classList.add('on')}
+function goHome(){showPage('pg-home');qact($('qi-home'))}
+function qact(el){document.querySelectorAll('.qi').forEach(q=>q.classList.remove('on'));if(el)el.classList.add('on')}
+
+/* ── SPEEDOMETER ARC ── */
 const CX=80,CY=80,R=70,SD=140,ED=400;
-function d2r(d){return d*Math.PI/180}
-function arc(sd,ed,r){
+const d2r=d=>d*Math.PI/180;
+function arcP(sd,ed,r){
   const s={x:CX+r*Math.cos(d2r(sd)),y:CY+r*Math.sin(d2r(sd))};
   const e={x:CX+r*Math.cos(d2r(ed)),y:CY+r*Math.sin(d2r(ed))};
-  const lg=(ed-sd)>180?1:0;
-  return `M${s.x} ${s.y} A${r} ${r} 0 ${lg} 1 ${e.x} ${e.y}`;
+  return `M${s.x} ${s.y} A${r} ${r} 0 ${(ed-sd)>180?1:0} 1 ${e.x} ${e.y}`;
 }
-document.getElementById('a-bg').setAttribute('d',arc(SD,ED,R));
-document.getElementById('a-glow').setAttribute('d',arc(SD,SD,R));
-document.getElementById('a-fill').setAttribute('d',arc(SD,SD,R));
-const tg=document.getElementById('ticks');
-for(let i=0;i<=18;i++){
-  const pct=i/18, deg=SD+pct*(ED-SD);
-  const ri=60, ro=i%3===0?68:65;
+$('a-bg').setAttribute('d',arcP(SD,ED,R));
+(()=>{const g=$('sticks');for(let i=0;i<=18;i++){
+  const deg=SD+(i/18)*(ED-SD),ri=60,ro=i%3===0?68:65;
   const s={x:CX+ri*Math.cos(d2r(deg)),y:CY+ri*Math.sin(d2r(deg))};
   const e={x:CX+ro*Math.cos(d2r(deg)),y:CY+ro*Math.sin(d2r(deg))};
   const l=document.createElementNS('http://www.w3.org/2000/svg','line');
-  l.setAttribute('x1',s.x);l.setAttribute('y1',s.y);
-  l.setAttribute('x2',e.x);l.setAttribute('y2',e.y);
+  ['x1','y1','x2','y2'].forEach((a,j)=>l.setAttribute(a,[s.x,s.y,e.x,e.y][j]));
   l.setAttribute('stroke',i%3===0?'rgba(255,255,255,.3)':'rgba(255,255,255,.1)');
-  l.setAttribute('stroke-width',i%3===0?'1.5':'1');
-  tg.appendChild(l);
+  l.setAttribute('stroke-width',i%3===0?'1.8':'1');
+  g.appendChild(l);}})();
+
+function setSpeed(v){
+  v=Math.max(0,Math.round(v));
+  $('spd-n').textContent=v;$('m-spd').textContent=v+' km/h';
+  const pct=Math.min(v/180,1),ed=SD+pct*(ED-SD);
+  const p=pct>.005?arcP(SD,ed,R):arcP(SD,SD+.01,R);
+  $('a-f').setAttribute('d',p);$('a-gl').setAttribute('d',p);
+  $('a-f').setAttribute('stroke',v>120?'#ff3b3b':v>80?'#ff8000':'url(#sg)');
+  const ab=$('alert-bar');
+  if(v>120){ab.style.display='flex';$('alert-msg').textContent=`車速 ${v} km/h，請減速！`}
+  else ab.style.display='none';
 }
+setSpeed(0);
 
-function updateSpeed(kmh) {
-  const v = Math.max(0, Math.round(kmh));
-  document.getElementById('spd-num').textContent = v;
-  document.getElementById('map-spd2').textContent = v + ' km/h';
-  const pct = Math.min(v / 180, 1);
-  const endDeg = SD + pct*(ED-SD);
-  const fillPath = arc(SD, endDeg, R);
-  document.getElementById('a-fill').setAttribute('d', pct > 0.001 ? fillPath : arc(SD,SD+0.01,R));
-  document.getElementById('a-glow').setAttribute('d', pct > 0.001 ? fillPath : arc(SD,SD+0.01,R));
-  // Color change
-  const fill = document.getElementById('a-fill');
-  if(v>120) fill.setAttribute('stroke','#ff3b3b');
-  else if(v>80) fill.setAttribute('stroke','#ff8000');
-  else fill.setAttribute('stroke','url(#spdGrad)');
-  // Alert
-  const ab = document.getElementById('alert-bar');
-  if(v>120){
-    ab.style.display='flex';
-    document.getElementById('alert-msg').textContent = `⚡ 車速 ${v} km/h 超過安全限制，請立即減速`;
-  } else ab.style.display='none';
+/* ── GPS ── */
+let map,marker,gpsWatch=null;
+(function initMap(){
+  map=L.map('map',{zoomControl:false,attributionControl:false}).setView([22.627,120.301],14);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19}).addTo(map);
+  const ico=L.divIcon({className:'',
+    html:'<div style="font-size:24px;filter:drop-shadow(0 0 8px rgba(240,165,0,.9))">🚗</div>',iconAnchor:[12,12]});
+  marker=L.marker([22.627,120.301],{icon:ico}).addTo(map);
+})();
+
+function startGPS(){
+  if(!navigator.geolocation){setBdg('e','不支援GPS');return}
+  setBdg('w','定位中…');
+  if(gpsWatch)navigator.geolocation.clearWatch(gpsWatch);
+  gpsWatch=navigator.geolocation.watchPosition(pos=>{
+    const{latitude:la,longitude:lo,speed,altitude,accuracy,heading}=pos.coords;
+    $('gps-dot').className='dot dot-a';
+    setSpeed(speed?speed*3.6:0);
+    setBdg('ok','✅ GPS 即時');
+    $('alt-v').textContent=altitude!=null?Math.round(altitude):'--';
+    $('acc-v').textContent=accuracy!=null?Math.round(accuracy):'--';
+    if(heading!=null&&!isNaN(heading))rotateCompass(heading,'GPS');
+    $('m-coord').textContent=`${la.toFixed(5)}, ${lo.toFixed(5)}`;
+    reverseGeo(la,lo);
+    if(map){marker.setLatLng([la,lo]);map.panTo([la,lo])}
+    fetchWx(la,lo);
+  },e=>setBdg('e','GPS:'+e.message),{enableHighAccuracy:true,maximumAge:1000,timeout:12000});
 }
-
-// ════════════════════════════════════
-// 4. GPS — REAL navigator.geolocation
-// ════════════════════════════════════
-let map, marker, gpsWatchId=null, lastLat=null, lastLon=null;
-let gpsGranted = false;
-
-function initMap(lat=25.04, lon=121.53) {
-  map = L.map('map',{zoomControl:false,attributionControl:false}).setView([lat,lon],14);
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{
-    maxZoom:19,attribution:'© OpenStreetMap © CARTO'
-  }).addTo(map);
-  L.control.attribution({prefix:false,position:'bottomright'}).addTo(map);
-  const carIcon = L.divIcon({
-    className:'',
-    html:'<div style="font-size:22px;filter:drop-shadow(0 0 6px rgba(240,165,0,.8))">🚗</div>',
-    iconAnchor:[11,11]
-  });
-  marker = L.marker([lat,lon],{icon:carIcon}).addTo(map);
+function setBdg(t,m){
+  const b=$('gps-bdg');
+  b.className='gps-bdg '+(t==='ok'?'bdg-ok':t==='e'?'bdg-e':'bdg-w');
+  b.textContent=m;
 }
-
-function startGPS() {
-  if(!navigator.geolocation){
-    setGPSBadge('err','不支援 GPS');return;
-  }
-  setGPSBadge('waiting','定位中…');
-  gpsWatchId = navigator.geolocation.watchPosition(
-    pos => {
-      const {latitude:lat,longitude:lon,speed,altitude,accuracy,heading} = pos.coords;
-      lastLat=lat; lastLon=lon;
-      document.getElementById('gps-dot').classList.remove('off');
-      // Speed (m/s → km/h)
-      const kmh = speed != null ? speed * 3.6 : 0;
-      updateSpeed(kmh);
-      setGPSBadge('real','✅ GPS 真實數據');
-      // Extras
-      document.getElementById('alt-val').textContent = altitude != null ? Math.round(altitude) : '--';
-      document.getElementById('acc-m-val').textContent = accuracy != null ? Math.round(accuracy) : '--';
-      // Heading from GPS
-      if(heading != null && !isNaN(heading)) updateCompass(heading, 'GPS');
-      // Coords
-      document.getElementById('map-coords').textContent =
-        `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
-      // Reverse geocode (Nominatim, free)
-      reverseGeocode(lat, lon);
-      // Map
-      if(map){ marker.setLatLng([lat,lon]); map.panTo([lat,lon]); }
-      // Fetch weather with real coords
-      if(gpsGranted) fetchWeather(lat, lon);
-    },
-    err => {
-      setGPSBadge('err','GPS 錯誤: ' + err.message);
-      document.getElementById('gps-dot').classList.add('off');
-    },
-    {enableHighAccuracy:true, maximumAge:1000, timeout:10000}
-  );
-}
-
-let lastGeocodeTime=0, lastGeocodeCoord='';
-async function reverseGeocode(lat,lon) {
-  const now=Date.now();
-  const coord=`${lat.toFixed(3)},${lon.toFixed(3)}`;
-  if(now-lastGeocodeTime<8000 || coord===lastGeocodeCoord) return;
-  lastGeocodeTime=now; lastGeocodeCoord=coord;
-  try{
-    const r = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lon}&format=json`,
-      {headers:{'Accept-Language':'zh-TW'}});
-    const d = await r.json();
-    const addr = d.address;
-    const place = addr.city||addr.town||addr.village||addr.county||'';
-    const road = addr.road||addr.suburb||'';
-    document.getElementById('wx-loc-chip').textContent = '📍 '+place+(road?' · '+road:'');
+let _gT=0,_gC='';
+async function reverseGeo(la,lo){
+  const now=Date.now(),c=`${la.toFixed(3)},${lo.toFixed(3)}`;
+  if(now-_gT<8000||c===_gC)return;_gT=now;_gC=c;
+  try{const r=await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${la}&lon=${lo}&format=json`,
+    {headers:{'Accept-Language':'zh-TW'}});
+    const d=await r.json(),a=d.address;
+    $('wx-loc').textContent='📍'+(a.city||a.town||a.village||a.county||'').substring(0,8);
   }catch(e){}
 }
-
-function setGPSBadge(type, msg) {
-  const b = document.getElementById('gps-badge');
-  b.className = 'gps-badge '+type;
-  b.textContent = msg;
+function rotateCompass(h,src){
+  $('needle').style.transform=`rotate(${h}deg)`;
+  $('hdg').textContent=Math.round(h)+'°';
+  const dirs=['北','東北','東','東南','南','西南','西','西北'];
+  $('hdg-d').textContent=dirs[Math.round(h/45)%8]+'（'+src+'）';
+}
+if(typeof DeviceOrientationEvent!=='undefined'&&
+   typeof DeviceOrientationEvent.requestPermission!=='function'){
+  window.addEventListener('deviceorientation',e=>{
+    const h=e.webkitCompassHeading||(e.alpha?360-e.alpha:null);
+    if(h!=null)rotateCompass(Math.round(h),'陀螺儀');
+  },true);
 }
 
-// ════════════════════════════════════
-// 5. DEVICE ORIENTATION — Compass
-// ════════════════════════════════════
-const DIRS = ['北','東北','東','東南','南','西南','西','西北'];
-function headingToDir(h){ return DIRS[Math.round(h/45)%8]; }
-
-function updateCompass(heading, src='陀螺儀') {
-  const h = Math.round(heading);
-  document.getElementById('compass-needle').style.transform = `rotate(${h}deg)`;
-  document.getElementById('hdg-val').textContent = h + '°';
-  document.getElementById('hdg-dir').textContent = headingToDir(h)+' ('+src+')';
+/* ── WEATHER ── */
+const WIC={0:'☀️',1:'🌤️',2:'⛅',3:'☁️',45:'🌫️',51:'🌦️',61:'🌧️',71:'❄️',80:'🌦️',95:'⛈️'};
+const WDC={0:'晴天',1:'晴朗',2:'多雲',3:'陰天',45:'霧',51:'小雨',61:'雨',71:'雪',80:'陣雨',95:'雷雨'};
+let _wxT=0;
+async function fetchWx(la,lo){
+  if(Date.now()-_wxT<60000)return;_wxT=Date.now();
+  try{const u=`https://api.open-meteo.com/v1/forecast?latitude=${la}&longitude=${lo}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code&timezone=auto`;
+    const d=await(await fetch(u)).json(),c=d.current,cd=c.weather_code;
+    $('wx-ico').textContent=WIC[cd]||'🌡️';
+    $('wx-t').textContent=Math.round(c.temperature_2m);
+    $('wx-d').textContent=WDC[cd]||'';
+    $('wx-h').textContent=Math.round(c.relative_humidity_2m)+'%';
+    $('wx-w').textContent=Math.round(c.wind_speed_10m)+'km/h';
+  }catch(e){}
 }
+fetchWx(22.627,120.301);
 
-function startCompass() {
-  if(typeof DeviceOrientationEvent !== 'undefined' &&
-     typeof DeviceOrientationEvent.requestPermission === 'function'){
-    DeviceOrientationEvent.requestPermission().then(s=>{
-      if(s==='granted') listenOrientation();
-    }).catch(()=>{});
-  } else {
-    listenOrientation();
-  }
-}
-
-function listenOrientation() {
-  window.addEventListener('deviceorientation', e=>{
-    let h = e.webkitCompassHeading || (e.alpha ? (360 - e.alpha) : null);
-    if(h!=null) updateCompass(Math.round(h), '陀螺儀');
-  }, true);
-}
-
-// ════════════════════════════════════
-// 6. WEATHER — Open-Meteo (free, no key)
-// ════════════════════════════════════
-const WX_CODES = {
-  0:'☀️',1:'🌤️',2:'⛅',3:'☁️',
-  45:'🌫️',48:'🌫️',51:'🌦️',53:'🌦️',55:'🌧️',
-  61:'🌧️',63:'🌧️',65:'🌧️',71:'❄️',73:'❄️',75:'❄️',
-  80:'🌦️',81:'🌦️',82:'⛈️',95:'⛈️',96:'⛈️',99:'⛈️'
-};
-const WX_DESC = {
-  0:'晴天',1:'大致晴朗',2:'部分多雲',3:'陰天',
-  45:'霧',48:'霧凇',51:'小毛毛雨',53:'毛毛雨',55:'大毛毛雨',
-  61:'小雨',63:'中雨',65:'大雨',71:'小雪',73:'中雪',75:'大雪',
-  80:'陣雨',81:'陣雨',82:'強陣雨',95:'雷陣雨',96:'雷陣雨',99:'強雷陣雨'
-};
-let lastWxFetch=0;
-async function fetchWeather(lat,lon){
-  if(Date.now()-lastWxFetch<60000) return;
-  lastWxFetch=Date.now();
-  try{
-    const url=`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code&timezone=auto`;
-    const r=await fetch(url);
-    const d=await r.json();
-    const c=d.current;
-    const code=c.weather_code;
-    document.getElementById('wx-icon').textContent = WX_CODES[code]||'🌡️';
-    document.getElementById('wx-temp').textContent = Math.round(c.temperature_2m);
-    document.getElementById('wx-desc').textContent = WX_DESC[code]||'未知';
-    document.getElementById('wx-humid').textContent = Math.round(c.relative_humidity_2m);
-    document.getElementById('wx-wind').textContent = Math.round(c.wind_speed_10m);
-  }catch(e){
-    document.getElementById('wx-desc').textContent='天氣載入失敗';
-  }
-}
-
-// Default: use Kaohsiung coords if no GPS
-fetchWeather(22.6273, 120.3014);
-
-// ════════════════════════════════════
-// 7. RADIO — Radio Browser API (real stations)
-// ════════════════════════════════════
-let stations=[], stIdx=0, playing=false, audioEl=document.getElementById('radio-audio');
-
+/* ── RADIO ── */
+let stations=[],stIdx=0,radioOn=false;
+const aud=$('audio');
 async function loadStations(){
-  try{
-    // Taiwan stations, TW country
-    const r=await fetch('https://de1.api.radio-browser.info/json/stations/bycountrycodeexact/TW?limit=30&order=votes&reverse=true&hidebroken=true');
-    const all=await r.json();
-    stations=all.filter(s=>s.url_resolved);
-    renderStationList();
-    if(stations.length) loadStation(0);
-  }catch(e){
-    document.getElementById('freq-name').textContent='電台載入失敗';
-  }
+  try{const r=await fetch('https://de1.api.radio-browser.info/json/stations/bycountrycodeexact/TW?limit=25&order=votes&reverse=true&hidebroken=true');
+    stations=(await r.json()).filter(s=>s.url_resolved);
+    renderRbList();if(stations.length)loadStation(0);
+  }catch(e){$('freq-n').textContent='電台載入失敗'}
 }
-
-function renderStationList(){
-  const ul=document.getElementById('rb-list');
-  ul.innerHTML='';
-  stations.slice(0,15).forEach((s,i)=>{
-    const d=document.createElement('div');
-    d.className='rb-item'+(i===0?' active':'');
-    d.textContent=`${i+1}. ${s.name}`;
-    d.onclick=()=>loadStation(i);
-    ul.appendChild(d);
+function renderRbList(){
+  const ul=$('rb-list');ul.innerHTML='';
+  stations.slice(0,12).forEach((s,i)=>{
+    const d=document.createElement('div');d.className='rb-i'+(i===0?' cur':'');
+    d.textContent=`${i+1}. ${s.name}`;d.onclick=()=>loadStation(i);ul.appendChild(d);
   });
 }
-
-function loadStation(idx){
-  stIdx=Math.max(0,Math.min(idx,stations.length-1));
+function loadStation(i){
+  stIdx=Math.max(0,Math.min(i,stations.length-1));
   const s=stations[stIdx];
-  document.getElementById('freq-val').textContent=s.frequency?s.frequency+' MHz':'🎵 串流';
-  document.getElementById('freq-name').textContent=s.name;
-  audioEl.src=s.url_resolved;
-  document.querySelectorAll('.rb-item').forEach((el,i)=>{
-    el.classList.toggle('active',i===stIdx);
-    if(i===stIdx) el.scrollIntoView({block:'nearest'});
+  $('freq-v').textContent=s.frequency?s.frequency+' MHz':'🎵';
+  $('freq-n').textContent=s.name;aud.src=s.url_resolved;
+  document.querySelectorAll('.rb-i').forEach((el,j)=>{
+    el.classList.toggle('cur',j===stIdx);if(j===stIdx)el.scrollIntoView({block:'nearest'});
   });
-  if(playing) audioEl.play().catch(()=>{});
+  if(radioOn)aud.play().catch(()=>{});
+}
+function toggleRadio(){
+  radioOn=!radioOn;
+  const b=$('r-play'),d=$('disc');
+  if(radioOn){aud.play().catch(()=>{radioOn=false});b.textContent='⏸';b.className='mb on';d.className='disc';}
+  else{aud.pause();b.textContent='▶';b.className='mb';d.className='disc paused';}
+}
+$('r-play').onclick=toggleRadio;
+$('r-prev').onclick=()=>loadStation(stIdx-1);
+$('r-next').onclick=()=>loadStation(stIdx+1);
+loadStations();
+
+/* ══════════════════════════════════
+   SHORTCUTS
+══════════════════════════════════ */
+const PALETTE=['#1565c0','#f0a500','#c62828','#2e7d32','#6a1b9a','#ad1457',
+               '#00838f','#1b5e20','#e65100','#37474f','#4527a0','#0277bd'];
+const EMOJIS=['🗺️','📻','🎵','🎬','⚙️','🔵','📱','🌐','🎙️','🚗','🛒','📹',
+  '🎚️','✨','📁','🎛️','🔌','📦','▶️','🏠','⭐','🔍','📡','🌤️','🔊','🎨',
+  '🧭','📝','💡','🔋','🌙','☀️','🔥','💎','🎯','🚀','🎮','📷','🏆','📞'];
+const DEFAULT_SC=[
+  {name:'Google地圖',ico:'🗺️',bg:'#1565c0',url:'https://maps.google.com',desc:''},
+  {name:'YouTube',ico:'▶️',bg:'#c62828',url:'https://youtube.com',desc:''},
+  {name:'廣播',ico:'📻',bg:'#f0a500',url:'#radio',desc:''},
+  {name:'Google助理',ico:'🎙️',bg:'#0277bd',url:'https://assistant.google.com',desc:''},
+  {name:'天氣',ico:'🌤️',bg:'#00838f',url:'https://weather.com',desc:''},
+  {name:'藍牙',ico:'🔵',bg:'#37474f',url:'#bt',desc:''},
+];
+let shortcuts=[];
+try{shortcuts=JSON.parse(localStorage.getItem('mbq-sc')||'null')||DEFAULT_SC}
+catch(e){shortcuts=[...DEFAULT_SC]}
+function saveSCLS(){try{localStorage.setItem('mbq-sc',JSON.stringify(shortcuts))}catch(e){}}
+
+/* Apps grid */
+const BUILT_IN=[
+  {name:'主題',ico:'🎨',bg:'#6a1b9a'},{name:'文件管理',ico:'📁',bg:'#e65100'},
+  {name:'方向盤按鍵',ico:'🎛️',bg:'#f0a500'},{name:'收音機',ico:'📻',bg:'#1565c0'},
+  {name:'均衡器',ico:'🎚️',bg:'#4527a0'},{name:'音樂',ico:'🎵',bg:'#ad1457'},
+  {name:'視頻',ico:'🎬',bg:'#263238'},{name:'設定',ico:'⚙️',bg:'#37474f'},
+  {name:'開機動畫',ico:'✨',bg:'#6a1b9a'},{name:'藍牙',ico:'🔵',bg:'#0277bd'},
+  {name:'APK安裝器',ico:'📦',bg:'#2e7d32'},{name:'AUX',ico:'🔌',bg:'#00838f'},
+  {name:'Chrome',ico:'🌐',bg:'#1565c0',url:'https://chrome.google.com'},
+  {name:'Play商店',ico:'🛒',bg:'#1b5e20',url:'https://play.google.com'},
+  {name:'YouTube',ico:'▶️',bg:'#c62828',url:'https://youtube.com'},
+  {name:'Google助理',ico:'🎙️',bg:'#0277bd',url:'https://assistant.google.com'},
+  {name:'記錄儀',ico:'📹',bg:'#263238'},{name:'Google地圖',ico:'🗺️',bg:'#1565c0',url:'https://maps.google.com'},
+  {name:'CarMate',ico:'🚗',bg:'#2e7d32'},{name:'樂客導航',ico:'🧭',bg:'#1565c0'},
+];
+function renderApps(){
+  const g=$('apps-grid');g.innerHTML='';
+  BUILT_IN.forEach(a=>{
+    const el=document.createElement('div');el.className='app-item';
+    const ico=document.createElement('div');ico.className='app-ico';
+    ico.style.background=a.bg||'#1565c0';ico.textContent=a.ico||'📱';
+    const lbl=document.createElement('div');lbl.className='app-lbl';lbl.textContent=a.name;
+    el.appendChild(ico);el.appendChild(lbl);
+    el.onclick=()=>a.url&&a.url.startsWith('http')?window.open(a.url,'_blank'):showToast('⚙️ 需 Android 車機環境');
+    g.appendChild(el);
+  });
+}
+renderApps();
+
+function renderSC(){
+  const g=$('sc-grid');g.innerHTML='';
+  shortcuts.forEach((s,i)=>{
+    const el=document.createElement('div');el.className='sc-item';el.tabIndex=0;
+    const ico=document.createElement('div');ico.className='sc-ico';ico.style.background=s.bg||PALETTE[0];
+    if(s.ico&&s.ico.startsWith('http')){const img=document.createElement('img');img.src=s.ico;ico.appendChild(img);}
+    else ico.textContent=s.ico||'🔗';
+    const nm=document.createElement('div');nm.className='sc-name';nm.textContent=s.name;
+    const ur=document.createElement('div');ur.className='sc-url';ur.textContent=s.url||'';
+    const acts=document.createElement('div');acts.className='sc-acts';
+    const eBtn=document.createElement('div');eBtn.className='sc-ab';eBtn.textContent='✎';
+    eBtn.style.cssText='color:var(--a);border-color:var(--boa)';
+    eBtn.onclick=e=>{e.stopPropagation();openEdit(i)};
+    const dBtn=document.createElement('div');dBtn.className='sc-ab';dBtn.textContent='✕';
+    dBtn.style.cssText='color:var(--r);border-color:rgba(255,59,59,.3)';
+    dBtn.onclick=e=>{e.stopPropagation();if(confirm(`刪除「${s.name}」？`)){shortcuts.splice(i,1);saveSCLS();renderSC();renderHomeSC();}};
+    acts.appendChild(eBtn);acts.appendChild(dBtn);
+    el.appendChild(acts);el.appendChild(ico);el.appendChild(nm);el.appendChild(ur);
+    el.onclick=()=>openApp(s);g.appendChild(el);
+  });
+}
+function renderHomeSC(){
+  const g=$('home-sc');g.innerHTML='';
+  shortcuts.slice(0,6).forEach(s=>{
+    const el=document.createElement('div');el.className='sc-home-item';
+    const ico=document.createElement('div');ico.className='sc-home-ico';
+    if(s.ico&&s.ico.startsWith('http')){
+      const img=document.createElement('img');img.src=s.ico;
+      img.style.cssText='width:32px;height:32px;object-fit:cover;border-radius:8px';
+      ico.appendChild(img);
+    } else ico.textContent=s.ico||'🔗';
+    const lbl=document.createElement('div');lbl.className='sc-home-lbl';lbl.textContent=s.name;
+    el.appendChild(ico);el.appendChild(lbl);el.onclick=()=>openApp(s);g.appendChild(el);
+  });
+}
+function openApp(s){
+  if(s.url==='#radio'){toggleRadio();return}
+  if(s.url&&s.url.startsWith('http'))window.open(s.url,'_blank');
+  else showToast('⚙️ '+s.name);
+}
+renderSC();renderHomeSC();
+
+/* ══════════════════════════════════
+   IMPORT / EXPORT  ← 完整重寫
+══════════════════════════════════ */
+
+/* EXPORT — 純 JS，無外部依賴 */
+function doExport(){
+  const header='名稱,圖示,背景色,網址,說明';
+  const rows=shortcuts.map(s=>
+    [s.name,s.ico||'',s.bg||'',s.url||'',s.desc||'']
+      .map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')
+  );
+  const csv='\uFEFF'+[header,...rows].join('\r\n');
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download='MBQ捷徑.csv';
+  document.body.appendChild(a);a.click();
+  setTimeout(()=>{URL.revokeObjectURL(url);a.remove()},200);
+  showToast('✅ CSV 已下載');
 }
 
-document.getElementById('btn-play').onclick=()=>{
-  playing=!playing;
-  const btn=document.getElementById('btn-play');
-  const disc=document.getElementById('disc');
-  if(playing){
-    audioEl.play().catch(e=>{
-      document.getElementById('freq-name').textContent='播放失敗：'+e.message;
-      playing=false;
-    });
-    btn.innerHTML='&#9646;&#9646;';
-    btn.className='mb playing';
-    disc.className='disc';
+/* RFC-4180 CSV line parser */
+function csvLine(line){
+  const result=[];let cur='',inQ=false;
+  for(let i=0;i<line.length;i++){
+    const ch=line[i];
+    if(inQ){
+      if(ch==='"'){if(line[i+1]==='"'){cur+='"';i++;}else inQ=false;}
+      else cur+=ch;
+    } else {
+      if(ch==='"')inQ=true;
+      else if(ch===','){result.push(cur);cur='';}
+      else cur+=ch;
+    }
+  }
+  result.push(cur);
+  return result;
+}
+
+/* IMPORT — file input change handler */
+$('file-input').addEventListener('change',function(){
+  const file=this.files[0];
+  if(!file){return}
+  const ext=file.name.split('.').pop().toLowerCase();
+  const st=$('import-status');
+  st.style.display='block';st.style.color='var(--tm)';st.textContent='讀取中…';
+
+  if(ext==='csv'){
+    /* ── CSV path: FileReader as text ── */
+    const reader=new FileReader();
+    reader.onload=ev=>{
+      try{
+        /* strip BOM, split lines */
+        const text=(ev.target.result||'').replace(/^\uFEFF/,'');
+        const lines=text.split(/\r?\n/);
+
+        /* skip header row(s) */
+        let start=0;
+        if(lines[0]&&(lines[0].includes('名稱')||lines[0].toLowerCase().startsWith('name')))
+          start=1;
+
+        const imported=[];
+        for(let i=start;i<lines.length;i++){
+          const ln=lines[i].trim();if(!ln)continue;
+          const cols=csvLine(ln);
+          const name=(cols[0]||'').trim();if(!name)continue;
+          imported.push({
+            name,
+            ico:(cols[1]||'🔗').trim()||'🔗',
+            bg:(cols[2]||PALETTE[0]).trim()||PALETTE[0],
+            url:(cols[3]||'').trim(),
+            desc:(cols[4]||'').trim(),
+          });
+        }
+
+        if(!imported.length){
+          st.style.color='var(--r)';st.textContent='❌ 找不到有效資料，請確認格式正確';
+          this.value='';return;
+        }
+        if(confirm(`確定匯入 ${imported.length} 個捷徑？\n（將取代現有 ${shortcuts.length} 個）`)){
+          shortcuts=imported;saveSCLS();renderSC();renderHomeSC();
+          st.style.color='var(--g)';st.textContent=`✅ 成功匯入 ${imported.length} 個捷徑`;
+          showToast('✅ 匯入完成！'+imported.length+' 個捷徑');
+        } else {st.style.display='none';}
+      }catch(err){
+        st.style.color='var(--r)';st.textContent='❌ 錯誤：'+err.message;
+        console.error('CSV import error',err);
+      }
+      this.value='';
+    };
+    reader.onerror=()=>{
+      st.style.color='var(--r)';st.textContent='❌ 檔案讀取失敗';this.value='';
+    };
+    /* 重點：readAsText 讀取 CSV，不是 readAsBinaryString */
+    reader.readAsText(file,'UTF-8');
+
+  } else if(ext==='xlsx'||ext==='xls'){
+    /* ── XLSX path: dynamically load SheetJS ── */
+    const doXLSX=()=>{
+      const reader=new FileReader();
+      reader.onload=ev=>{
+        try{
+          const wb=XLSX.read(ev.target.result,{type:'binary'});
+          const ws=wb.Sheets[wb.SheetNames[0]];
+          const rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:false,defval:''});
+          let start=0;
+          if(rows[0]&&String(rows[0][0]).includes('名稱'))start=1;
+          const imported=[];
+          rows.slice(start).forEach(r=>{
+            const name=String(r[0]||'').trim();if(!name)return;
+            imported.push({name,ico:String(r[1]||'🔗').trim(),
+              bg:String(r[2]||PALETTE[0]).trim(),url:String(r[3]||'').trim(),desc:String(r[4]||'').trim()});
+          });
+          if(!imported.length){st.style.color='var(--r)';st.textContent='❌ 找不到有效資料';this.value='';return;}
+          if(confirm(`確定匯入 ${imported.length} 個捷徑？`)){
+            shortcuts=imported;saveSCLS();renderSC();renderHomeSC();
+            st.style.color='var(--g)';st.textContent=`✅ 成功匯入 ${imported.length} 個`;
+            showToast('✅ 匯入 '+imported.length+' 個捷徑');
+          } else st.style.display='none';
+        }catch(err){st.style.color='var(--r)';st.textContent='❌ '+err.message}
+        this.value='';
+      };
+      reader.readAsBinaryString(file);
+    };
+    if(typeof XLSX!=='undefined'){doXLSX();}
+    else{
+      const s=document.createElement('script');
+      s.src='https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js';
+      s.onload=doXLSX;
+      s.onerror=()=>{st.style.color='var(--r)';st.textContent='❌ 無法載入 xlsx 庫，請改用 CSV';this.value=''};
+      document.head.appendChild(s);
+    }
   } else {
-    audioEl.pause();
-    btn.innerHTML='&#9654;';
-    btn.className='mb';
-    disc.className='disc paused';
+    st.style.color='var(--r)';st.textContent='❌ 僅支援 .csv 或 .xlsx 格式';this.value='';
   }
-};
-document.getElementById('btn-prev').onclick=()=>loadStation(stIdx-1);
-document.getElementById('btn-next').onclick=()=>loadStation(stIdx+1);
+});
 
-// ════════════════════════════════════
-// 8. OBD-II via Web Serial API
-// ════════════════════════════════════
-let obdPort=null, obdReader=null, obdWriter=null;
-let obdConnected=false;
-
-document.getElementById('obd-btn').onclick=connectOBD;
-
-async function connectOBD(){
-  if(!('serial' in navigator)){
-    alert('您的瀏覽器不支援 Web Serial API。\n請使用 Chrome/Edge 桌面版。');return;
-  }
-  try{
-    obdPort=await navigator.serial.requestPort();
-    await obdPort.open({baudRate:38400});
-    obdConnected=true;
-    document.getElementById('obd-dot').style.background='var(--green)';
-    document.getElementById('obd-dot').style.boxShadow='0 0 6px var(--green)';
-    document.getElementById('obd-txt').textContent='OBD-II 已連接';
-    const enc=new TextEncoderStream();
-    enc.readable.pipeTo(obdPort.writable);
-    obdWriter=enc.writable.getWriter();
-    const dec=new TextDecoderStream();
-    obdPort.readable.pipeTo(dec.writable);
-    obdReader=dec.readable.getReader();
-    await initELM327();
-    loopOBD();
-  }catch(e){
-    document.getElementById('obd-txt').textContent='連接失敗：'+e.message;
-  }
+/* ══ MODAL ══ */
+let selIco='🔗',selColor=PALETTE[0],selImgUrl=null;
+function buildEmoji(){
+  const p=$('emoji-scroll');p.innerHTML='';
+  EMOJIS.forEach(e=>{
+    const d=document.createElement('div');d.className='ep'+(e===selIco&&!selImgUrl?' on':'');
+    d.textContent=e;
+    d.onclick=()=>{selIco=e;selImgUrl=null;$('f-img').value='';
+      document.querySelectorAll('.ep').forEach(x=>x.classList.remove('on'));d.classList.add('on');updPrev()};
+    p.appendChild(d);
+  });
+}
+function buildColors(){
+  const r=$('col-row');r.innerHTML='';
+  PALETTE.forEach(c=>{
+    const s=document.createElement('div');s.className='csw'+(c===selColor?' on':'');
+    s.style.background=c;
+    s.onclick=()=>{selColor=c;document.querySelectorAll('.csw').forEach(x=>x.classList.remove('on'));s.classList.add('on');updPrev()};
+    r.appendChild(s);
+  });
+}
+function updPrev(){
+  const p=$('ico-pv');p.style.background=selColor;
+  if(selImgUrl)p.innerHTML=`<img src="${selImgUrl}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit">`;
+  else p.textContent=selIco||'🔗';
+}
+function onImgUrl(url){
+  if(url&&url.startsWith('http')){selImgUrl=url;selIco=url;}else selImgUrl=null;updPrev();
+}
+function openAdd(){
+  $('edit-idx').value=-1;$('modal-title').textContent='新增捷徑';
+  $('f-name').value='';$('f-url').value='';$('f-img').value='';
+  selIco='🔗';selColor=PALETTE[0];selImgUrl=null;
+  buildEmoji();buildColors();updPrev();$('modal-ov').classList.add('on');
+}
+function openEdit(i){
+  const s=shortcuts[i];
+  $('edit-idx').value=i;$('modal-title').textContent='編輯捷徑';
+  $('f-name').value=s.name;$('f-url').value=s.url||'';
+  $('f-img').value=s.ico&&s.ico.startsWith('http')?s.ico:'';
+  selIco=s.ico||'🔗';selColor=s.bg||PALETTE[0];
+  selImgUrl=s.ico&&s.ico.startsWith('http')?s.ico:null;
+  buildEmoji();buildColors();updPrev();$('modal-ov').classList.add('on');
+}
+function closeModal(){$('modal-ov').classList.remove('on')}
+function saveSC_item(){
+  const name=$('f-name').value.trim();if(!name){alert('請輸入名稱');return}
+  const item={name,ico:selIco||'🔗',bg:selColor||PALETTE[0],url:$('f-url').value.trim(),desc:''};
+  const idx=parseInt($('edit-idx').value);
+  if(idx>=0)shortcuts[idx]=item;else shortcuts.push(item);
+  saveSCLS();renderSC();renderHomeSC();closeModal();showToast('✅ 已儲存：'+name);
 }
 
-async function sendOBD(cmd){
-  if(!obdWriter) return '';
-  await obdWriter.write(cmd+'\r');
-  let res='',t=Date.now();
-  while(Date.now()-t<1500){
-    const {value}=await obdReader.read();
-    res+=value||'';
-    if(res.includes('>')) break;
-  }
-  return res;
+/* ══ TOAST ══ */
+function showToast(msg){
+  const t=$('toast');t.textContent=msg;t.style.opacity='1';
+  clearTimeout(t._t);t._t=setTimeout(()=>t.style.opacity='0',3000);
 }
 
-async function initELM327(){
-  await sendOBD('ATZ');   // Reset
-  await sendOBD('ATE0');  // Echo off
-  await sendOBD('ATL0');  // Linefeeds off
-  await sendOBD('ATSP0'); // Auto protocol
-}
-
-function parseOBD(raw){
-  return raw.replace(/\s/g,'').replace(/>/g,'').replace(/OK/g,'')
-            .replace(/SEARCHING/g,'').replace(/ATZ/g,'').replace(/[A-Z]{3,}/g,'');
-}
-
-async function loopOBD(){
-  if(!obdConnected) return;
-  async function query(pid){
-    const r=await sendOBD('01'+pid);
-    const clean=parseOBD(r);
-    const bytes=clean.split(/(?:41)+[0-9A-F]{2}/i).join('').match(/.{2}/g)||[];
-    return bytes.map(b=>parseInt(b,16));
-  }
-  async function tick(){
-    if(!obdConnected) return;
-    try{
-      // RPM: PID 0C
-      const rpm=await query('0C');
-      if(rpm.length>=2){
-        const v=((rpm[0]*256)+rpm[1])/4;
-        document.getElementById('obd-rpm').textContent=Math.round(v);
-        document.getElementById('obd-rpm-b').style.width=Math.min(v/7000*100,100)+'%';
-      }
-      // Coolant temp: PID 05
-      const temp=await query('05');
-      if(temp.length>=1){
-        const v=temp[0]-40;
-        document.getElementById('obd-temp').textContent=v;
-        document.getElementById('obd-temp-b').style.width=Math.min((v+40)/255*100,100)+'%';
-      }
-      // Fuel level: PID 2F
-      const fuel=await query('2F');
-      if(fuel.length>=1){
-        const v=Math.round(fuel[0]/2.55);
-        document.getElementById('obd-fuel').textContent=v;
-        document.getElementById('obd-fuel-b').style.width=v+'%';
-      }
-      // Battery voltage via AT RV (ELM extension)
-      const bv=await sendOBD('ATRV');
-      const vm=bv.match(/(\d+\.\d+)/);
-      if(vm){
-        document.getElementById('obd-bat').textContent=parseFloat(vm[1]).toFixed(1);
-        document.getElementById('obd-bat-b').style.width=Math.min((parseFloat(vm[1])-10)/4*100,100)+'%';
-      }
-    }catch(e){}
-    setTimeout(tick, 500);
-  }
-  tick();
-}
-
-// ════════════════════════════════════
-// 9. PERMISSIONS & INIT
-// ════════════════════════════════════
-initMap(22.6273, 120.3014); // Default Kaohsiung
-
-document.getElementById('grant-btn').onclick=async()=>{
-  document.getElementById('perm-modal').classList.remove('show');
-  gpsGranted=true;
-  startGPS();
-  startCompass();
-  await loadStations();
-};
-document.getElementById('skip-btn').onclick=async()=>{
-  document.getElementById('perm-modal').classList.remove('show');
-  updateSpeed(0);
-  setGPSBadge('err','GPS 未授權');
-  await loadStations();
-};
-
-// ════════════════════════════════════
-// 10. QUICKBAR
-// ════════════════════════════════════
-function qact(el){
-  document.querySelectorAll('.qi').forEach(q=>q.classList.remove('on'));
-  el.classList.add('on');
-}
+/* ══ INIT ══ */
+setTimeout(startGPS,600);
 </script>
 </body>
 </html>
