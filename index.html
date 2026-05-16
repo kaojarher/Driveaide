@@ -182,15 +182,7 @@ body{font-family:var(--ui);color:var(--t);
   color:var(--a);
   text-shadow:0 0 30px var(--ag),0 0 60px rgba(240,165,0,.2);
 }
-/* Speed box — amber border like photo */
-.spd-box{
-  border:2px solid var(--a);
-  border-radius:14px;
-  padding:6px 24px 4px;
-  box-shadow:0 0 20px var(--ag), inset 0 0 20px rgba(240,165,0,.04);
-  background:rgba(0,0,0,.3);
-  display:flex;flex-direction:column;align-items:center;
-}
+/* Speed box style removed */
 .gps-bdg{
   font-family:var(--hud);font-size:10px;letter-spacing:1px;
   padding:3px 10px;border-radius:20px;margin-top:4px;
@@ -505,9 +497,7 @@ body{font-family:var(--ui);color:var(--t);
   <div class="col-c">
     <div class="spd-top">
       <div class="spd-unit-top">公里/時</div>
-      <div class="spd-box">
-        <div class="spd-big" id="spd-n">0</div>
-      </div>
+      <div class="spd-big" id="spd-n">0</div>
       <div class="gps-bdg bdg-w" id="gps-bdg">⏳ 等待GPS</div>
       <div class="spd-ext">
         <div class="se"><div class="se-v" id="alt-v">--</div><div>海拔m</div></div>
@@ -939,48 +929,83 @@ function doExport(){
   showToast('✅ CSV 已下載');
 }
 
+/* RFC-4180 CSV parser — returns unquoted field values */
 function csvLine(line){
   const res=[];let cur='',inQ=false;
   for(let i=0;i<line.length;i++){
     const ch=line[i];
-    if(inQ){if(ch==='"'){if(line[i+1]==='"'){cur+='"';i++;}else inQ=false;}else cur+=ch;}
-    else{if(ch==='"')inQ=true;else if(ch===','){res.push(cur);cur='';}else cur+=ch;}
+    if(inQ){
+      if(ch==='"'){
+        if(line[i+1]==='"'){cur+='"';i++;} // escaped quote
+        else inQ=false;
+      } else cur+=ch;
+    } else {
+      if(ch==='"'){inQ=true;}
+      else if(ch===','){res.push(cur);cur='';}
+      else cur+=ch;
+    }
   }
-  res.push(cur);return res;
+  res.push(cur);
+  return res; // fields are already unquoted by the parser above
 }
 
 $('file-input').addEventListener('change',function(){
   const file=this.files[0];if(!file)return;
   const ext=file.name.split('.').pop().toLowerCase();
-  const st=$('import-status');st.style.display='block';st.style.color='var(--tm)';st.textContent='讀取中…';
+  const st=$('import-status');
+  st.style.display='block';st.style.color='var(--tm)';st.textContent='讀取中…';
+
   if(ext==='csv'){
     const reader=new FileReader();
     reader.onload=ev=>{
       try{
-        const text=(ev.target.result||'').replace(/^\uFEFF/,'');
+        const text=(ev.target.result||'').replace(/^\uFEFF/,''); // strip BOM
         const lines=text.split(/\r?\n/);
+
+        // skip header row
         let start=0;
-        if(lines[0]&&(lines[0].includes('名稱')||lines[0].toLowerCase().startsWith('name')))start=1;
+        if(lines[0]){
+          const h=lines[0].replace(/"/g,'');
+          if(h.includes('名稱')||h.toLowerCase().startsWith('name')) start=1;
+        }
+
         const imported=[];
         for(let i=start;i<lines.length;i++){
-          const ln=lines[i].trim();if(!ln)continue;
-          const cols=csvLine(ln);
-          const name=(cols[0]||'').trim();if(!name)continue;
-          imported.push({name,ico:(cols[1]||'🔗').trim()||'🔗',
-            bg:(cols[2]||PALETTE[0]).trim()||PALETTE[0],
-            url:(cols[3]||'').trim(),desc:(cols[4]||'').trim()});
+          const ln=lines[i].trim();
+          if(!ln) continue;
+          const cols=csvLine(ln); // already unquoted
+          const name=(cols[0]||'').trim();
+          if(!name) continue;
+          imported.push({
+            name,
+            ico: (cols[1]||'').trim() || '🔗',
+            bg:  (cols[2]||'').trim() || PALETTE[0],
+            url: (cols[3]||'').trim(),
+            desc:(cols[4]||'').trim(),
+          });
         }
-        if(!imported.length){st.style.color='var(--r)';st.textContent='❌ 找不到有效資料';this.value='';return}
-        if(confirm(`確定匯入 ${imported.length} 個捷徑？（取代現有 ${shortcuts.length} 個）`)){
+
+        if(!imported.length){
+          st.style.color='var(--r)';
+          st.textContent='❌ 找不到有效資料（共讀取 '+(lines.length-start)+' 行）';
+          this.value='';return;
+        }
+        if(confirm(`確定匯入 ${imported.length} 個捷徑？\n（將取代現有 ${shortcuts.length} 個）`)){
           shortcuts=imported;saveSCLS();renderSC();renderHomeSC();
-          st.style.color='var(--g)';st.textContent=`✅ 成功匯入 ${imported.length} 個捷徑`;
+          st.style.color='var(--g)';
+          st.textContent=`✅ 成功匯入 ${imported.length} 個捷徑`;
           showToast('✅ 匯入完成！'+imported.length+' 個捷徑');
-        }else st.style.display='none';
-      }catch(err){st.style.color='var(--r)';st.textContent='❌ '+err.message}
+        } else st.style.display='none';
+
+      }catch(err){
+        st.style.color='var(--r)';
+        st.textContent='❌ 解析錯誤：'+err.message;
+        console.error('CSV parse error',err);
+      }
       this.value='';
     };
     reader.onerror=()=>{st.style.color='var(--r)';st.textContent='❌ 讀取失敗';this.value=''};
-    reader.readAsText(file,'UTF-8');
+    reader.readAsText(file,'UTF-8');  // ← 關鍵：CSV 用 readAsText，不是 readAsBinaryString
   }else if(ext==='xlsx'||ext==='xls'){
     const go=()=>{
       const reader=new FileReader();
