@@ -680,12 +680,12 @@ body{font-family:var(--ui);color:var(--t);
   <div class="io-area">
     <h3>📁 匯入 / 匯出</h3>
     <div class="io-note">
-      格式：<b>名稱, 圖示, 背景色, 網址, 說明</b>（CSV）<br>
-      ①匯出 CSV　②Excel 編輯　③匯入 CSV
+      格式：<b>JSON 陣列</b>，每筆包含 name、ico、bg、url 欄位<br>
+      ①按「匯出 JSON」下載　②用文字編輯器修改　③按「匯入 JSON」選擇檔案
     </div>
     <div class="io-btns">
-      <button class="btn btn-g" onclick="doExport()">⬇ 匯出 CSV</button>
-      <label class="file-lbl">⬆ 匯入<input type="file" id="file-input" accept=".csv,.xlsx,.xls"></label>
+      <button class="btn btn-g" onclick="doExport()">⬇ 匯出 JSON</button>
+      <label class="file-lbl">⬆ 匯入 JSON<input type="file" id="file-input" accept=".json"></label>
     </div>
     <div id="import-status"></div>
   </div>
@@ -1009,151 +1009,125 @@ function openApp(s){
 }
 renderSC();renderHomeSC();
 
-/* ══ IMPORT / EXPORT ══ */
+/* ══ EXPORT JSON ══ */
 function doExport(){
-  const header='名稱,圖示,背景色,網址,說明';
-  const rows=shortcuts.map(s=>
-    [s.name,s.ico||'',s.bg||'',s.url||'',s.desc||'']
-      .map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(','));
-  const csv='\uFEFF'+[header,...rows].join('\r\n');
-  const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
-  const url=URL.createObjectURL(blob);
-  const a=document.createElement('a');a.href=url;a.download='MBQ捷徑.csv';
-  document.body.appendChild(a);a.click();
-  setTimeout(()=>{URL.revokeObjectURL(url);a.remove()},200);
-  showToast('✅ CSV 已下載');
+  var data = JSON.stringify(shortcuts, null, 2);
+  var blob = new Blob([data], {type:'application/json;charset=utf-8'});
+  var url  = URL.createObjectURL(blob);
+  var a    = document.createElement('a');
+  a.href = url; a.download = 'MBQ捷徑.json';
+  document.body.appendChild(a); a.click();
+  setTimeout(function(){ URL.revokeObjectURL(url); a.remove(); }, 200);
+  showToast('✅ JSON 已下載');
 }
 
-/* RFC-4180 CSV parser — returns unquoted field values */
-function csvLine(line){
-  const res=[];let cur='',inQ=false;
-  for(let i=0;i<line.length;i++){
-    const ch=line[i];
-    if(inQ){
-      if(ch==='"'){
-        if(line[i+1]==='"'){cur+='"';i++;} // escaped quote
-        else inQ=false;
-      } else cur+=ch;
-    } else {
-      if(ch==='"'){inQ=true;}
-      else if(ch===','){res.push(cur);cur='';}
-      else cur+=ch;
-    }
+/* ══ IMPORT CONFIRM UI ══ */
+function showImportResult(st, imported){
+  st.innerHTML = '';
+  if(!imported || !imported.length){
+    st.style.color = 'var(--r)';
+    st.textContent = '❌ 沒有找到可匯入的資料';
+    return;
   }
-  res.push(cur);
-  return res; // fields are already unquoted by the parser above
+  st.style.color = 'var(--c)';
+  st.textContent = '找到 ' + imported.length + ' 個捷徑';
+
+  var wrap = document.createElement('div');
+  wrap.style.cssText = 'display:flex;gap:8px;margin-top:10px;flex-wrap:wrap';
+
+  var btnOk = document.createElement('button');
+  btnOk.textContent = '✅ 確認匯入 (' + imported.length + ')';
+  btnOk.style.cssText = 'padding:10px 18px;border-radius:10px;border:none;' +
+    'background:#00e676;color:#000;font-weight:700;font-size:15px;cursor:pointer;flex:1';
+  btnOk.onclick = function(){
+    shortcuts = imported;
+    saveSCLS();
+    renderSC();
+    renderHomeSC();
+    st.innerHTML = '';
+    st.style.color = 'var(--g)';
+    st.textContent = '✅ 已匯入 ' + imported.length + ' 個捷徑';
+    showToast('✅ 匯入完成！共 ' + imported.length + ' 個');
+  };
+
+  var btnNo = document.createElement('button');
+  btnNo.textContent = '✕ 取消';
+  btnNo.style.cssText = 'padding:10px 18px;border-radius:10px;' +
+    'border:1px solid rgba(255,255,255,.15);background:transparent;' +
+    'color:#8099bb;font-size:15px;cursor:pointer';
+  btnNo.onclick = function(){ st.style.display = 'none'; };
+
+  wrap.appendChild(btnOk);
+  wrap.appendChild(btnNo);
+  st.appendChild(wrap);
 }
 
-$('file-input').addEventListener('change',function(){
-  const file=this.files[0];if(!file)return;
-  const ext=file.name.split('.').pop().toLowerCase();
-  const st=$('import-status');
-  st.style.display='block';st.style.color='var(--tm)';st.textContent='讀取中…';
+/* ══ IMPORT HANDLER (JSON) ══ */
+(function(){
+  var fileInput = $('file-input');
 
-  if(ext==='csv'){
-    const reader=new FileReader();
-    reader.onload=ev=>{
-      try{
-        const text=(ev.target.result||'').replace(/^\uFEFF/,''); // strip BOM
-        const lines=text.split(/\r?\n/);
+  fileInput.addEventListener('change', function(){
+    var file = fileInput.files[0];
+    if(!file) return;
+    fileInput.value = ''; // reset so same file can be re-selected
 
-        // skip header row
-        let start=0;
-        if(lines[0]){
-          const h=lines[0].replace(/"/g,'');
-          if(h.includes('名稱')||h.toLowerCase().startsWith('name')) start=1;
-        }
+    var ext = file.name.split('.').pop().toLowerCase();
+    var st  = $('import-status');
+    st.innerHTML = '';
+    st.style.display = 'block';
+    st.style.color   = 'var(--tm)';
+    st.textContent   = '📂 讀取中：' + file.name;
 
-        const imported=[];
-        for(let i=start;i<lines.length;i++){
-          const ln=lines[i].trim();
-          if(!ln) continue;
-          const cols=csvLine(ln); // already unquoted
-          const name=(cols[0]||'').trim();
-          if(!name) continue;
-          imported.push({
-            name,
-            ico: (cols[1]||'').trim() || '🔗',
-            bg:  (cols[2]||'').trim() || PALETTE[0],
-            url: (cols[3]||'').trim(),
-            desc:(cols[4]||'').trim(),
-          });
-        }
-
-        if(!imported.length){
-          st.style.color='var(--r)';
-          st.textContent='❌ 找不到有效資料（共讀取 '+(lines.length-start)+' 行）';
-          this.value='';return;
-        }
-
-        // 改用 inline 確認，避免 confirm() 在部分手機被封鎖
-        st.style.color='var(--c)';
-        st.textContent=`找到 ${imported.length} 個捷徑，確認匯入？`;
-        st.style.display='block';
-
-        // 加入確認/取消按鈕
-        const btnWrap=document.createElement('div');
-        btnWrap.style.cssText='display:flex;gap:8px;margin-top:8px';
-        const btnOk=document.createElement('button');
-        btnOk.textContent='✅ 確認匯入';
-        btnOk.style.cssText='padding:8px 16px;border-radius:8px;border:none;background:var(--g);color:#000;font-weight:700;font-size:14px;cursor:pointer';
-        const btnNo=document.createElement('button');
-        btnNo.textContent='✕ 取消';
-        btnNo.style.cssText='padding:8px 16px;border-radius:8px;border:1px solid var(--bo);background:transparent;color:var(--tm);font-size:14px;cursor:pointer';
-        btnWrap.appendChild(btnOk);btnWrap.appendChild(btnNo);
-        st.appendChild(btnWrap);
-
-        btnOk.onclick=()=>{
-          shortcuts=imported;saveSCLS();renderSC();renderHomeSC();
-          st.innerHTML='';st.style.color='var(--g)';
-          st.textContent=`✅ 成功匯入 ${imported.length} 個捷徑`;
-          showToast('✅ 匯入完成！'+imported.length+' 個捷徑');
-        };
-        btnNo.onclick=()=>{st.style.display='none'};
-
-      }catch(err){
-        st.style.color='var(--r)';
-        st.textContent='❌ 解析錯誤：'+err.message;
-        console.error('CSV parse error',err);
-      }
-      this.value='';
-    };
-    reader.onerror=()=>{st.style.color='var(--r)';st.textContent='❌ 讀取失敗';this.value=''};
-    reader.readAsText(file,'UTF-8');  // ← 關鍵：CSV 用 readAsText，不是 readAsBinaryString
-  }else if(ext==='xlsx'||ext==='xls'){
-    const go=()=>{
-      const reader=new FileReader();
-      reader.onload=ev=>{
+    if(ext === 'json'){
+      var reader = new FileReader();
+      reader.onload = function(ev){
         try{
-          const wb=XLSX.read(ev.target.result,{type:'binary'});
-          const ws=wb.Sheets[wb.SheetNames[0]];
-          const rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:false,defval:''});
-          let start=0;if(rows[0]&&String(rows[0][0]).includes('名稱'))start=1;
-          const imported=[];
-          rows.slice(start).forEach(r=>{const name=String(r[0]||'').trim();if(!name)return;
-            imported.push({name,ico:String(r[1]||'🔗').trim(),bg:String(r[2]||PALETTE[0]).trim(),
-              url:String(r[3]||'').trim(),desc:String(r[4]||'').trim()});});
-          if(!imported.length){st.style.color='var(--r)';st.textContent='❌ 無有效資料';this.value='';return}
-          st.style.color='var(--c)';st.textContent=`找到 ${imported.length} 個捷徑，確認匯入？`;
-          const bw=document.createElement('div');bw.style.cssText='display:flex;gap:8px;margin-top:8px';
-          const bo2=document.createElement('button');bo2.textContent='✅ 確認匯入';
-          bo2.style.cssText='padding:8px 16px;border-radius:8px;border:none;background:var(--g);color:#000;font-weight:700;font-size:14px;cursor:pointer';
-          const bn2=document.createElement('button');bn2.textContent='✕ 取消';
-          bn2.style.cssText='padding:8px 16px;border-radius:8px;border:1px solid var(--bo);background:transparent;color:var(--tm);font-size:14px;cursor:pointer';
-          bw.appendChild(bo2);bw.appendChild(bn2);st.appendChild(bw);
-          bo2.onclick=()=>{shortcuts=imported;saveSCLS();renderSC();renderHomeSC();
-            st.innerHTML='';st.style.color='var(--g)';st.textContent=`✅ 匯入 ${imported.length} 個`;showToast('✅ 匯入完成');};
-          bn2.onclick=()=>{st.style.display='none'};
-        }catch(err){st.style.color='var(--r)';st.textContent='❌ '+err.message}
-        this.value='';
-      };reader.readAsBinaryString(file);
-    };
-    if(typeof XLSX!=='undefined')go();
-    else{const s=document.createElement('script');s.src='https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js';
-      s.onload=go;s.onerror=()=>{st.style.color='var(--r)';st.textContent='❌ 請改用 CSV';this.value=''};
-      document.head.appendChild(s);}
-  }else{st.style.color='var(--r)';st.textContent='❌ 僅支援 CSV 或 xlsx';this.value='';}
-});
+          var raw = (ev.target.result || '').replace(/^\uFEFF/, ''); // strip BOM
+          var parsed = JSON.parse(raw);
+
+          // accept array directly, or {shortcuts:[...]} wrapper
+          var arr = Array.isArray(parsed) ? parsed
+                  : (Array.isArray(parsed.shortcuts) ? parsed.shortcuts : null);
+
+          if(!arr){
+            st.style.color = 'var(--r)';
+            st.textContent = '❌ JSON 格式錯誤：必須為陣列';
+            return;
+          }
+
+          // normalise each entry
+          var imported = [];
+          arr.forEach(function(item){
+            if(typeof item !== 'object' || !item) return;
+            var name = String(item.name || item.名稱 || '').trim();
+            if(!name) return;
+            imported.push({
+              name : name,
+              ico  : String(item.ico  || item.圖示 || '🔗').trim() || '🔗',
+              bg   : String(item.bg   || item.背景色 || PALETTE[0]).trim() || PALETTE[0],
+              url  : String(item.url  || item.網址 || '').trim(),
+              desc : String(item.desc || item.說明 || '').trim()
+            });
+          });
+
+          showImportResult(st, imported);
+        } catch(err){
+          st.style.color = 'var(--r)';
+          st.textContent = '❌ 解析失敗：' + err.message;
+        }
+      };
+      reader.onerror = function(){
+        st.style.color = 'var(--r)';
+        st.textContent = '❌ 檔案讀取失敗';
+      };
+      reader.readAsText(file, 'UTF-8');
+
+    } else {
+      st.style.color = 'var(--r)';
+      st.textContent = '❌ 請選擇 .json 檔案';
+    }
+  });
+})();
 
 /* ══ MODAL ══ */
 let selIco='🔗',selColor=PALETTE[0],selImgUrl=null;
